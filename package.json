@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
+    "start": "node scripts/oneclick-deploy.mjs",
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
