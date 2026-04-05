@@ -27,14 +27,20 @@ class LanServer {
   }
 
   async start() {
-    const cert = this.makeCertificate();
-    this.server = https.createServer(
-      {
-        key: cert.private,
-        cert: cert.cert,
-      },
-      (req, res) => this.handleHttpRequest(req, res)
-    );
+    const isRender = process.env.RENDER === "true";
+    if (isRender) {
+      const http = await import("node:http");
+      this.server = http.createServer((req, res) => this.handleHttpRequest(req, res));
+    } else {
+      const cert = this.makeCertificate();
+      this.server = https.createServer(
+        {
+          key: cert.private,
+          cert: cert.cert,
+        },
+        (req, res) => this.handleHttpRequest(req, res)
+      );
+    }
 
     this.wss = new WebSocketServer({ noServer: true });
     this.wss.on("connection", (socket) => this.handleWsConnection(socket));
@@ -54,18 +60,22 @@ class LanServer {
     return new Promise((resolve) => {
       this.server.listen(port, host, () => {
         const lanIp = this.getLanIp();
-        const localUrl = `https://localhost:${port}`;
-        const lanUrl = lanIp ? `https://${lanIp}:${port}` : localUrl;
+        const protocol = isRender ? "http" : "https";
+        const localUrl = `${protocol}://localhost:${port}`;
+        const lanUrl = lanIp ? `${protocol}://${lanIp}:${port}` : localUrl;
 
         console.log("\nOne-click deploy is live.");
-        console.log(`Local URL: ${localUrl}`);
-        console.log(`LAN URL:   ${lanUrl}`);
-        console.log("\nIf the browser warns about the certificate, continue so camera access can work.");
-        console.log("\nScan this QR code from your phone:");
-        qrcodeTerminal.generate(lanUrl, { small: true });
-        console.log("\nPress Ctrl+C to stop the server.");
-
-        this.openBrowser(localUrl);
+        if (isRender) {
+          console.log(`Server listening on port ${port}`);
+        } else {
+          console.log(`Local URL: ${localUrl}`);
+          console.log(`LAN URL:   ${lanUrl}`);
+          console.log("\nIf the browser warns about the certificate, continue so camera access can work.");
+          console.log("\nScan this QR code from your phone:");
+          qrcodeTerminal.generate(lanUrl, { small: true });
+          console.log("\nPress Ctrl+C to stop the server.");
+          this.openBrowser(localUrl);
+        }
         resolve();
       });
 
@@ -363,7 +373,10 @@ async function installAndBuild() {
 }
 
 async function main() {
-  await installAndBuild();
+  const isProduction = process.env.NODE_ENV === "production" || process.env.RENDER === "true";
+  if (!isProduction) {
+    await installAndBuild();
+  }
   const server = new LanServer();
   await server.start();
 }
