@@ -7,6 +7,10 @@ export interface PeerViewModel {
   state: PeerState;
 }
 
+export function sortPeers(peers: PeerViewModel[]) {
+  return [...peers].sort((a, b) => a.name.localeCompare(b.name));
+}
+
 interface ServerPeer {
   id: string;
   name: string;
@@ -32,11 +36,7 @@ interface PeerLeftMessage {
 interface SignalMessage {
   type: "signal";
   from: string;
-  signal: {
-    kind: "offer" | "answer" | "ice";
-    description?: RTCSessionDescriptionInit;
-    candidate?: RTCIceCandidateInit;
-  };
+  signal: SignalPayload;
 }
 
 interface ErrorMessage {
@@ -96,10 +96,6 @@ interface StartIntercomOptions {
 
 function createMediaStream(): MediaStream {
   return new MediaStream();
-}
-
-function sortPeers(peers: PeerViewModel[]) {
-  return [...peers].sort((a, b) => a.name.localeCompare(b.name));
 }
 
 function isOfferLike(message: SignalPayload): message is Extract<SignalPayload, { kind: "offer" }> {
@@ -201,7 +197,7 @@ export async function startIntercom(options: StartIntercomOptions) {
         send({
           type: "signal",
           to: peerId,
-          signal: { kind: "ice", candidate: event.candidate.toJSON() },
+          signal: { kind: "ice", candidate: event.candidate.toJSON() as RTCIceCandidateInit },
         });
       }
     };
@@ -234,7 +230,7 @@ export async function startIntercom(options: StartIntercomOptions) {
             to: peerId,
             signal: {
               kind: "offer",
-              description: connection.localDescription ?? offer,
+              description: (connection.localDescription ?? offer) as RTCSessionDescriptionInit,
             },
           });
         } catch (error) {
@@ -263,7 +259,7 @@ export async function startIntercom(options: StartIntercomOptions) {
         to: message.from,
         signal: {
           kind: "answer",
-          description: connection.localDescription ?? answer,
+          description: (connection.localDescription ?? answer) as RTCSessionDescriptionInit,
         },
       });
       await flushPendingCandidates(message.from, connection);
