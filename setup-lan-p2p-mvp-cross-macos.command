@@ -2,4 +2,4 @@
 set -euo pipefail
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 cd "$SCRIPT_DIR"
-node "./scripts/oneclick-deploy.mjs"
+node "./oneclick-deploy.mjs"

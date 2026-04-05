@@ -88,6 +88,7 @@ interface StartIntercomOptions {
   roomId: string;
   displayName: string;
   signalUrl: string;
+  videoConstraints: boolean | MediaTrackConstraints;
   onStatus: (status: string) => void;
   onLocalStream: (stream: MediaStream) => void;
   onPeersChange: (peers: PeerViewModel[]) => void;
@@ -289,7 +290,10 @@ export async function startIntercom(options: StartIntercomOptions) {
 
   try {
     onStatus("Requesting camera and microphone access");
-    localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    localStream = await navigator.mediaDevices.getUserMedia({
+      video: options.videoConstraints,
+      audio: true,
+    });
     onLocalStream(localStream);
   } catch (error) {
     const message =

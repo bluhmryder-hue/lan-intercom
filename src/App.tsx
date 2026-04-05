@@ -9,6 +9,13 @@ const OFFLINE_DELAY_MS = 5000;
 
 type PresenceMode = "basic" | "loud";
 type RemotePresence = "idle" | "connecting" | "connected" | "offline";
+type VideoQuality = "360p" | "720p" | "1080p";
+
+const VIDEO_CONSTRAINTS: Record<VideoQuality, MediaTrackConstraints> = {
+  "360p": { width: 640, height: 360, frameRate: 30 },
+  "720p": { width: 1280, height: 720, frameRate: 30 },
+  "1080p": { width: 1920, height: 1080, frameRate: 30 },
+};
 
 function readBoolean(key: string, fallback: boolean) {
   const value = localStorage.getItem(key);
@@ -86,6 +93,9 @@ export default function App() {
   const [connectChime, setConnectChime] = useState(() =>
     readBoolean("lan-intercom:connect-chime", true)
   );
+  const [videoQuality, setVideoQuality] = useState<VideoQuality>(
+    () => (localStorage.getItem("lan-intercom:video-quality") as VideoQuality) ?? "720p"
+  );
   const [remotePresence, setRemotePresence] = useState<RemotePresence>("idle");
   const cleanupRef = useRef<null | (() => void)>(null);
   const offlineTimerRef = useRef<number | null>(null);
@@ -139,6 +149,13 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem("lan-intercom:connect-chime", String(connectChime));
   }, [connectChime]);
+
+  useEffect(() => {
+    localStorage.setItem("lan-intercom:video-quality", videoQuality);
+    if (running) {
+      void handleJoin();
+    }
+  }, [videoQuality]);
 
   useEffect(() => {
     if (offlineTimerRef.current !== null) {
@@ -196,6 +213,7 @@ export default function App() {
         displayName,
         roomId: CALL_ID,
         signalUrl,
+        videoConstraints: VIDEO_CONSTRAINTS[videoQuality],
         onStatus: setStatus,
         onLocalStream: setLocalStream,
         onPeersChange: setPeers,
@@ -311,6 +329,15 @@ export default function App() {
               onChange={(event) => setConnectChime(event.target.checked)}
             />
             <span>Play connect chime</span>
+          </label>
+
+          <label className="setting-row">
+            <span>Video quality</span>
+            <select value={videoQuality} onChange={(event) => setVideoQuality(event.target.value as VideoQuality)}>
+              <option value="360p">360p (Low bandwidth)</option>
+              <option value="720p">720p (High definition)</option>
+              <option value="1080p">1080p (Full HD)</option>
+            </select>
           </label>
         </article>
       </section>
