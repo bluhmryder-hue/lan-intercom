@@ -312,7 +312,7 @@ export async function startIntercom(options: StartIntercomOptions) {
   });
 
   socket.addEventListener("message", async (event) => {
-    const payload = JSON.parse(event.data as string) as ServerMessage;
+    let payload; try { payload = JSON.parse(event.data as string) as ServerMessage; } catch (e) { console.error("Malformed signaling message", e); return; }
 
     if (payload.type === "joined") {
       selfPeerId = payload.peerId;
