@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import fs from "node:fs";
 import fsp from "node:fs/promises";
+import http from "node:http";
 import https from "node:https";
 import os from "node:os";
 import path from "node:path";
@@ -158,17 +159,15 @@ function startServer() {
   const root = path.resolve(distDir);
   const rootPrefix = `${root}${path.sep}`;
   const rooms = new Map();
-  const cert = makeCertificate();
+  const isRender = process.env.RENDER === "true" || process.env.RENDER === "1";
 
-  const server = https.createServer(
-    {
-      key: cert.private,
-      cert: cert.cert,
-    },
-    async (req, res) => {
-      try {
-        const requestUrl = new URL(req.url ?? "/", `https://${req.headers.host ?? "localhost"}`);
-        let pathname = decodeURIComponent(requestUrl.pathname);
+  let server;
+
+  const requestHandler = async (req, res) => {
+    try {
+      const protocol = isRender ? "http" : "https";
+      const requestUrl = new URL(req.url ?? "/", `${protocol}://${req.headers.host ?? "localhost"}`);
+      let pathname = decodeURIComponent(requestUrl.pathname);
 
         if (pathname === "/") {
           pathname = "/index.html";
@@ -203,19 +202,31 @@ function startServer() {
           filePath = path.join(root, "index.html");
         }
 
-        const body = await fsp.readFile(filePath);
-        res.writeHead(200, {
-          "Content-Length": body.length,
-          "Content-Type": mimeType(filePath),
-        });
-        res.end(body);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "Unknown server error";
-        res.writeHead(500, { "Content-Type": "text/plain; charset=utf-8" });
-        res.end(message);
-      }
+      const body = await fsp.readFile(filePath);
+      res.writeHead(200, {
+        "Content-Length": body.length,
+        "Content-Type": mimeType(filePath),
+      });
+      res.end(body);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown server error";
+      res.writeHead(500, { "Content-Type": "text/plain; charset=utf-8" });
+      res.end(message);
     }
-  );
+  };
+
+  if (isRender) {
+    server = http.createServer(requestHandler);
+  } else {
+    const cert = makeCertificate();
+    server = https.createServer(
+      {
+        key: cert.private,
+        cert: cert.cert,
+      },
+      requestHandler
+    );
+  }
 
   const wss = new WebSocketServer({ noServer: true });
 
@@ -348,7 +359,8 @@ function startServer() {
   });
 
   server.on("upgrade", (req, socket, head) => {
-    const requestUrl = new URL(req.url ?? "/", `https://${req.headers.host ?? "localhost"}`);
+    const protocol = isRender ? "http" : "https";
+    const requestUrl = new URL(req.url ?? "/", `${protocol}://${req.headers.host ?? "localhost"}`);
     if (requestUrl.pathname !== "/signal") {
       socket.destroy();
       return;
@@ -361,18 +373,22 @@ function startServer() {
 
   server.listen(port, host, () => {
     const lanIp = getLanIp();
-    const localUrl = `https://localhost:${port}`;
-    const lanUrl = lanIp ? `https://${lanIp}:${port}` : localUrl;
+    const protocol = isRender ? "http" : "https";
+    const localUrl = `${protocol}://localhost:${port}`;
+    const lanUrl = lanIp ? `${protocol}://${lanIp}:${port}` : localUrl;
 
     console.log("\nOne-click deploy is live.");
     console.log(`Local URL: ${localUrl}`);
     console.log(`LAN URL:   ${lanUrl}`);
-    console.log("\nIf the browser warns about the certificate, continue so camera access can work.");
-    console.log("\nScan this QR code from your phone:");
-    qrcodeTerminal.generate(lanUrl, { small: true });
-    console.log("\nPress Ctrl+C to stop the server.");
 
-    openBrowser(localUrl);
+    if (!isRender) {
+      console.log("\nIf the browser warns about the certificate, continue so camera access can work.");
+      console.log("\nScan this QR code from your phone:");
+      qrcodeTerminal.generate(lanUrl, { small: true });
+      openBrowser(localUrl);
+    }
+
+    console.log("\nPress Ctrl+C to stop the server.");
   });
 
   server.on("error", (error) => {
@@ -383,7 +399,10 @@ function startServer() {
 }
 
 async function main() {
-  await installAndBuild();
+  const isRender = process.env.RENDER === "true" || process.env.RENDER === "1";
+  if (!isRender) {
+    await installAndBuild();
+  }
   startServer();
 }
 
