@@ -18,28 +18,34 @@ function readBoolean(key: string, fallback: boolean) {
   return value === "true";
 }
 
+let audioContext: AudioContext | null = null;
+
 function playConnectChime() {
-  const audioContext = new window.AudioContext();
-  const gain = audioContext.createGain();
+  if (!audioContext) {
+    audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+  }
+  const ctx = audioContext!;
+
+  if (ctx.state === "suspended") {
+    void ctx.resume();
+  }
+
+  const gain = ctx.createGain();
   gain.gain.value = 0.0001;
-  gain.connect(audioContext.destination);
+  gain.connect(ctx.destination);
 
   const tones = [784, 988];
   tones.forEach((frequency, index) => {
-    const oscillator = audioContext.createOscillator();
+    const oscillator = ctx.createOscillator();
     oscillator.type = "sine";
     oscillator.frequency.value = frequency;
     oscillator.connect(gain);
-    oscillator.start(audioContext.currentTime + index * 0.12);
-    oscillator.stop(audioContext.currentTime + index * 0.12 + 0.08);
+    oscillator.start(ctx.currentTime + index * 0.12);
+    oscillator.stop(ctx.currentTime + index * 0.12 + 0.08);
   });
 
-  gain.gain.exponentialRampToValueAtTime(0.08, audioContext.currentTime + 0.02);
-  gain.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + 0.35);
-
-  window.setTimeout(() => {
-    void audioContext.close();
-  }, 500);
+  gain.gain.exponentialRampToValueAtTime(0.08, ctx.currentTime + 0.02);
+  gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.35);
 }
 
 function formatPresenceLabel(mode: PresenceMode, state: RemotePresence) {
