@@ -10,6 +10,15 @@ const OFFLINE_DELAY_MS = 5000;
 type PresenceMode = "basic" | "loud";
 type RemotePresence = "idle" | "connecting" | "connected" | "offline";
 
+let cachedAudioContext: AudioContext | null = null;
+
+function getAudioContext() {
+  if (!cachedAudioContext) {
+    cachedAudioContext = new window.AudioContext();
+  }
+  return cachedAudioContext;
+}
+
 function readBoolean(key: string, fallback: boolean) {
   const value = localStorage.getItem(key);
   if (value === null) {
@@ -18,8 +27,13 @@ function readBoolean(key: string, fallback: boolean) {
   return value === "true";
 }
 
-function playConnectChime() {
-  const audioContext = new window.AudioContext();
+async function playConnectChime() {
+  const audioContext = getAudioContext();
+
+  if (audioContext.state === "suspended") {
+    await audioContext.resume();
+  }
+
   const gain = audioContext.createGain();
   gain.gain.value = 0.0001;
   gain.connect(audioContext.destination);
@@ -36,10 +50,6 @@ function playConnectChime() {
 
   gain.gain.exponentialRampToValueAtTime(0.08, audioContext.currentTime + 0.02);
   gain.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + 0.35);
-
-  window.setTimeout(() => {
-    void audioContext.close();
-  }, 500);
 }
 
 function formatPresenceLabel(mode: PresenceMode, state: RemotePresence) {
@@ -149,7 +159,7 @@ export default function App() {
     if (rawPresence === "connected") {
       setRemotePresence("connected");
       if (!wasConnectedRef.current && connectChime) {
-        playConnectChime();
+        void playConnectChime();
       }
       wasConnectedRef.current = true;
       return;
