@@ -106,7 +106,7 @@ async function pathExists(filePath) {
 }
 
 function openBrowser(url) {
-  if (process.env.NO_BROWSER === "1") {
+  if (process.env.NO_BROWSER === "1" || process.env.RENDER) {
     return;
   }
 
@@ -130,10 +130,22 @@ function openBrowser(url) {
 }
 
 async function installAndBuild() {
+  const indexFile = path.join(distDir, "index.html");
+  if (await pathExists(indexFile)) {
+    console.log("\nBuild artifacts found in dist/. Skipping install and build steps.");
+    return;
+  }
+
+  if (process.env.RENDER) {
+    console.error(`\nError: Build artifacts not found at ${indexFile}.`);
+    console.error("In a Render production environment, the build step should have run during CI.");
+    console.error("Make sure your build command (e.g., 'npm run build') is configured correctly in Render.");
+    process.exit(1);
+  }
+
   await runCommand(npmCmd, ["install"], "Installing dependencies");
   await runCommand(npmCmd, ["run", "build"], "Building production bundle");
 
-  const indexFile = path.join(distDir, "index.html");
   if (!(await pathExists(indexFile))) {
     throw new Error(`Build output not found: ${indexFile}`);
   }
@@ -368,8 +380,12 @@ function startServer() {
     console.log(`Local URL: ${localUrl}`);
     console.log(`LAN URL:   ${lanUrl}`);
     console.log("\nIf the browser warns about the certificate, continue so camera access can work.");
-    console.log("\nScan this QR code from your phone:");
-    qrcodeTerminal.generate(lanUrl, { small: true });
+
+    if (!process.env.RENDER) {
+      console.log("\nScan this QR code from your phone:");
+      qrcodeTerminal.generate(lanUrl, { small: true });
+    }
+
     console.log("\nPress Ctrl+C to stop the server.");
 
     openBrowser(localUrl);
