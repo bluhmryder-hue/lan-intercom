@@ -32,11 +32,7 @@ interface PeerLeftMessage {
 interface SignalMessage {
   type: "signal";
   from: string;
-  signal: {
-    kind: "offer" | "answer" | "ice";
-    description?: RTCSessionDescriptionInit;
-    candidate?: RTCIceCandidateInit;
-  };
+  signal: SignalPayload;
 }
 
 interface ErrorMessage {
