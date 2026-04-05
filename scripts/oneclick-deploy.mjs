@@ -18,6 +18,7 @@ const distDir = path.join(projectRoot, "dist");
 const port = Number.parseInt(process.env.PORT ?? "5173", 10);
 const host = "0.0.0.0";
 const npmCmd = process.platform === "win32" ? "npm.cmd" : "npm";
+const isRender = !!process.env.RENDER;
 
 function runCommand(command, args, label) {
   return new Promise((resolve, reject) => {
@@ -106,7 +107,7 @@ async function pathExists(filePath) {
 }
 
 function openBrowser(url) {
-  if (process.env.NO_BROWSER === "1") {
+  if (process.env.NO_BROWSER === "1" || isRender) {
     return;
   }
 
@@ -130,12 +131,25 @@ function openBrowser(url) {
 }
 
 async function installAndBuild() {
+  const indexFile = path.join(distDir, "index.html");
+  if (await pathExists(indexFile)) {
+    console.log("Found existing dist/index.html, skipping install and build.");
+    return;
+  }
+
+  if (isRender) {
+    console.log("Running on Render, build should have been handled by build command. Checking dist...");
+    if (!(await pathExists(indexFile))) {
+      throw new Error("Build output not found in dist directory. Ensure your build command is 'npm install && npm run build'.");
+    }
+    return;
+  }
+
   await runCommand(npmCmd, ["install"], "Installing dependencies");
   await runCommand(npmCmd, ["run", "build"], "Building production bundle");
 
-  const indexFile = path.join(distDir, "index.html");
   if (!(await pathExists(indexFile))) {
-    throw new Error(`Build output not found: ${indexFile}`);
+    throw new Error(`Build output not found after build: ${indexFile}`);
   }
 }
 
@@ -367,12 +381,16 @@ function startServer() {
     console.log("\nOne-click deploy is live.");
     console.log(`Local URL: ${localUrl}`);
     console.log(`LAN URL:   ${lanUrl}`);
-    console.log("\nIf the browser warns about the certificate, continue so camera access can work.");
-    console.log("\nScan this QR code from your phone:");
-    qrcodeTerminal.generate(lanUrl, { small: true });
-    console.log("\nPress Ctrl+C to stop the server.");
 
-    openBrowser(localUrl);
+    if (!isRender) {
+      console.log("\nIf the browser warns about the certificate, continue so camera access can work.");
+      console.log("\nScan this QR code from your phone:");
+      qrcodeTerminal.generate(lanUrl, { small: true });
+      console.log("\nPress Ctrl+C to stop the server.");
+      openBrowser(localUrl);
+    } else {
+      console.log("\nRunning on Render. The server is ready.");
+    }
   });
 
   server.on("error", (error) => {
