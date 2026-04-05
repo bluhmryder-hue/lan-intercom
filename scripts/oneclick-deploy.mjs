@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 import fs from "node:fs";
 import fsp from "node:fs/promises";
 import https from "node:https";
@@ -18,6 +17,7 @@ const distDir = path.join(projectRoot, "dist");
 const port = Number.parseInt(process.env.PORT ?? "5173", 10);
 const host = "0.0.0.0";
 const npmCmd = process.platform === "win32" ? "npm.cmd" : "npm";
+const IS_RENDER = !!process.env.RENDER;
 
 function runCommand(command, args, label) {
   return new Promise((resolve, reject) => {
@@ -106,7 +106,7 @@ async function pathExists(filePath) {
 }
 
 function openBrowser(url) {
-  if (process.env.NO_BROWSER === "1") {
+  if (process.env.NO_BROWSER === "1" || IS_RENDER) {
     return;
   }
 
@@ -130,10 +130,15 @@ function openBrowser(url) {
 }
 
 async function installAndBuild() {
+  const indexFile = path.join(distDir, "index.html");
+  if (IS_RENDER && (await pathExists(indexFile))) {
+    console.log("\nSkipping install and build on Render because dist output exists.");
+    return;
+  }
+
   await runCommand(npmCmd, ["install"], "Installing dependencies");
   await runCommand(npmCmd, ["run", "build"], "Building production bundle");
 
-  const indexFile = path.join(distDir, "index.html");
   if (!(await pathExists(indexFile))) {
     throw new Error(`Build output not found: ${indexFile}`);
   }
@@ -367,12 +372,14 @@ function startServer() {
     console.log("\nOne-click deploy is live.");
     console.log(`Local URL: ${localUrl}`);
     console.log(`LAN URL:   ${lanUrl}`);
-    console.log("\nIf the browser warns about the certificate, continue so camera access can work.");
-    console.log("\nScan this QR code from your phone:");
-    qrcodeTerminal.generate(lanUrl, { small: true });
-    console.log("\nPress Ctrl+C to stop the server.");
 
-    openBrowser(localUrl);
+    if (!IS_RENDER) {
+      console.log("\nIf the browser warns about the certificate, continue so camera access can work.");
+      console.log("\nScan this QR code from your phone:");
+      qrcodeTerminal.generate(lanUrl, { small: true });
+      console.log("\nPress Ctrl+C to stop the server.");
+      openBrowser(localUrl);
+    }
   });
 
   server.on("error", (error) => {
