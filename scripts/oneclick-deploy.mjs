@@ -103,7 +103,7 @@ async function pathExists(filePath) {
 }
 
 function openBrowser(url) {
-  if (process.env.NO_BROWSER === "1") {
+  if (process.env.NO_BROWSER === "1" || process.env.RENDER === "true") {
     return;
   }
 
@@ -127,6 +127,14 @@ function openBrowser(url) {
 }
 
 async function installAndBuild() {
+  if (process.env.RENDER === "true") {
+    const indexFile = path.join(distDir, "index.html");
+    if (await pathExists(indexFile)) {
+      console.log("\nSkipping install and build on Render because dist/index.html already exists.");
+      return;
+    }
+  }
+
   await runCommand(npmCmd, ["install"], "Installing dependencies");
   await runCommand(npmCmd, ["run", "build"], "Building production bundle");
 
@@ -154,7 +162,6 @@ function createRoomState() {
 
 async function startServer() {
   const { WebSocket, WebSocketServer } = await import("ws");
-  const qrcodeTerminal = (await import("qrcode-terminal")).default;
 
   const root = path.resolve(distDir);
   const rootPrefix = `${root}${path.sep}`;
@@ -369,11 +376,16 @@ async function startServer() {
     console.log(`Local URL: ${localUrl}`);
     console.log(`LAN URL:   ${lanUrl}`);
     console.log("\nIf the browser warns about the certificate, continue so camera access can work.");
-    console.log("\nScan this QR code from your phone:");
-    qrcodeTerminal.generate(lanUrl, { small: true });
-    console.log("\nPress Ctrl+C to stop the server.");
 
-    openBrowser(localUrl);
+    if (process.env.RENDER !== "true") {
+      console.log("\nScan this QR code from your phone:");
+      import("qrcode-terminal").then((m) => {
+        m.default.generate(lanUrl, { small: true });
+      });
+      openBrowser(localUrl);
+    }
+
+    console.log("\nPress Ctrl+C to stop the server.");
   });
 
   server.on("error", (error) => {
