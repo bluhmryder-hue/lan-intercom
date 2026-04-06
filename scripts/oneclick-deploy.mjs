@@ -1,15 +1,11 @@
-#!/usr/bin/env node
-import fs from "node:fs";
-import fsp from "node:fs/promises";
 import https from "node:https";
 import os from "node:os";
 import path from "node:path";
+import fs from "node:fs";
+import fsp from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import qrcodeTerminal from "qrcode-terminal";
-import selfsigned from "selfsigned";
-import { WebSocket, WebSocketServer } from "ws";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -139,8 +135,17 @@ async function installAndBuild() {
   }
 }
 
-function makeCertificate() {
-  return selfsigned.generate(
+async function startServer() {
+  // Dynamically import dependencies that were just installed
+  const qrcodeTerminal = (await import("qrcode-terminal")).default;
+  const selfsigned = (await import("selfsigned")).default;
+  const { WebSocket, WebSocketServer } = await import("ws");
+
+  const root = path.resolve(distDir);
+  const rootPrefix = `${root}${path.sep}`;
+  const rooms = new Map();
+
+  const cert = selfsigned.generate(
     [{ name: "commonName", value: "lan-p2p-intercom.local" }],
     {
       algorithm: "sha256",
@@ -148,17 +153,6 @@ function makeCertificate() {
       keySize: 2048,
     }
   );
-}
-
-function createRoomState() {
-  return new Map();
-}
-
-function startServer() {
-  const root = path.resolve(distDir);
-  const rootPrefix = `${root}${path.sep}`;
-  const rooms = new Map();
-  const cert = makeCertificate();
 
   const server = https.createServer(
     {
@@ -221,7 +215,7 @@ function startServer() {
 
   const getRoom = (roomId) => {
     if (!rooms.has(roomId)) {
-      rooms.set(roomId, createRoomState());
+      rooms.set(roomId, new Map());
     }
     return rooms.get(roomId);
   };
@@ -384,7 +378,7 @@ function startServer() {
 
 async function main() {
   await installAndBuild();
-  startServer();
+  await startServer();
 }
 
 main().catch((error) => {
