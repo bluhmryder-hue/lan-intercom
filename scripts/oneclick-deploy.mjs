@@ -14,6 +14,7 @@ const distDir = path.join(projectRoot, "dist");
 const port = Number.parseInt(process.env.PORT ?? "5173", 10);
 const host = "0.0.0.0";
 const npmCmd = process.platform === "win32" ? "npm.cmd" : "npm";
+const isRender = process.env.RENDER === "true" || !!process.env.RENDER;
 
 function runCommand(command, args, label) {
   return new Promise((resolve, reject) => {
@@ -102,7 +103,7 @@ async function pathExists(filePath) {
 }
 
 function openBrowser(url) {
-  if (process.env.NO_BROWSER === "1") {
+  if (process.env.NO_BROWSER === "1" || isRender) {
     return;
   }
 
@@ -126,8 +127,25 @@ function openBrowser(url) {
 }
 
 async function installAndBuild() {
-  await runCommand(npmCmd, ["install"], "Installing dependencies");
-  await runCommand(npmCmd, ["run", "build"], "Building production bundle");
+  const nodeModulesExist = await pathExists(path.join(projectRoot, "node_modules"));
+  const distExists = await pathExists(path.join(distDir, "index.html"));
+
+  if (isRender && distExists) {
+    console.log("\nDetected Render environment and existing build. Skipping install/build steps.");
+    return;
+  }
+
+  if (!nodeModulesExist) {
+    await runCommand(npmCmd, ["install"], "Installing dependencies");
+  } else {
+    console.log("\nSkipping npm install (node_modules already exists)");
+  }
+
+  if (!distExists) {
+    await runCommand(npmCmd, ["run", "build"], "Building production bundle");
+  } else {
+    console.log("\nSkipping build (dist/index.html already exists)");
+  }
 
   const indexFile = path.join(distDir, "index.html");
   if (!(await pathExists(indexFile))) {
@@ -361,12 +379,17 @@ async function startServer() {
     console.log("\nOne-click deploy is live.");
     console.log(`Local URL: ${localUrl}`);
     console.log(`LAN URL:   ${lanUrl}`);
-    console.log("\nIf the browser warns about the certificate, continue so camera access can work.");
-    console.log("\nScan this QR code from your phone:");
-    qrcodeTerminal.generate(lanUrl, { small: true });
-    console.log("\nPress Ctrl+C to stop the server.");
 
-    openBrowser(localUrl);
+    if (isRender) {
+      console.log("\nService is running on Render.");
+    } else {
+      console.log("\nIf the browser warns about the certificate, continue so camera access can work.");
+      console.log("\nScan this QR code from your phone:");
+      qrcodeTerminal.generate(lanUrl, { small: true });
+      openBrowser(localUrl);
+    }
+
+    console.log("\nPress Ctrl+C to stop the server.");
   });
 
   server.on("error", (error) => {
