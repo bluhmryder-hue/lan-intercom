@@ -7,9 +7,6 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import qrcodeTerminal from "qrcode-terminal";
-import selfsigned from "selfsigned";
-import { WebSocket, WebSocketServer } from "ws";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -139,7 +136,8 @@ async function installAndBuild() {
   }
 }
 
-function makeCertificate() {
+async function makeCertificate() {
+  const selfsigned = (await import("selfsigned")).default;
   return selfsigned.generate(
     [{ name: "commonName", value: "lan-p2p-intercom.local" }],
     {
@@ -154,11 +152,14 @@ function createRoomState() {
   return new Map();
 }
 
-function startServer() {
+async function startServer() {
+  const { WebSocket, WebSocketServer } = await import("ws");
+  const qrcodeTerminal = (await import("qrcode-terminal")).default;
+
   const root = path.resolve(distDir);
   const rootPrefix = `${root}${path.sep}`;
   const rooms = new Map();
-  const cert = makeCertificate();
+  const cert = await makeCertificate();
 
   const server = https.createServer(
     {
@@ -384,7 +385,7 @@ function startServer() {
 
 async function main() {
   await installAndBuild();
-  startServer();
+  await startServer();
 }
 
 main().catch((error) => {
