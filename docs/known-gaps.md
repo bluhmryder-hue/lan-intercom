@@ -4,7 +4,6 @@ The repository now has a working one-click deploy path, but these parts are stil
 
 - Persistent room storage is not implemented.
 - Motion detection is present as utility code, not wired into a recording flow.
-- Clip management uses placeholder storage helpers.
 - Advanced encoding features are not part of the working launcher path.
 
 These gaps are separate from the LAN intercom flow and can be filled in later without changing the launcher structure.
