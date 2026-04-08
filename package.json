@@ -7,7 +7,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "deploy": "node scripts/oneclick-deploy.mjs",
-    "test": "vitest run"
+    "test": "vitest run",
+    "start": "node scripts/oneclick-deploy.mjs"
   },
   "dependencies": {
     "qrcode-terminal": "^0.12.0",

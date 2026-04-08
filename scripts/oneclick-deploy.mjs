@@ -129,7 +129,7 @@ function openBrowser(url) {
   }
 }
 
-async function installAndBuild() {
+async function installAndBuild() { if (process.env.RENDER === "true" && await pathExists(distDir)) { console.log("\nSkipping installation and build on Render because dist directory exists."); return; }
   await runCommand(npmCmd, ["install"], "Installing dependencies");
   await runCommand(npmCmd, ["run", "build"], "Building production bundle");
 
