@@ -7,6 +7,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "vitest",
+    "start": "node scripts/oneclick-deploy.mjs",
     "deploy": "node scripts/oneclick-deploy.mjs"
   },
   "dependencies": {
