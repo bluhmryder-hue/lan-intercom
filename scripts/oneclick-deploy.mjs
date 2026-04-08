@@ -130,6 +130,12 @@ function openBrowser(url) {
 }
 
 async function installAndBuild() {
+  if (process.env.RENDER) {
+    if (await pathExists(distDir)) {
+      console.log("\nSkipping build on Render because dist directory already exists.");
+      return;
+    }
+  }
   await runCommand(npmCmd, ["install"], "Installing dependencies");
   await runCommand(npmCmd, ["run", "build"], "Building production bundle");
 
@@ -369,10 +375,14 @@ function startServer() {
     console.log(`LAN URL:   ${lanUrl}`);
     console.log("\nIf the browser warns about the certificate, continue so camera access can work.");
     console.log("\nScan this QR code from your phone:");
-    qrcodeTerminal.generate(lanUrl, { small: true });
+    if (!process.env.RENDER) {
+      qrcodeTerminal.generate(lanUrl, { small: true });
+    }
     console.log("\nPress Ctrl+C to stop the server.");
 
-    openBrowser(localUrl);
+    if (!process.env.RENDER) {
+      openBrowser(localUrl);
+    }
   });
 
   server.on("error", (error) => {
