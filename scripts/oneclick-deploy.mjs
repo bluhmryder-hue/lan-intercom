@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 import fs from "node:fs";
 import fsp from "node:fs/promises";
 import https from "node:https";
@@ -106,7 +105,7 @@ async function pathExists(filePath) {
 }
 
 function openBrowser(url) {
-  if (process.env.NO_BROWSER === "1") {
+  if (process.env.NO_BROWSER === "1" || process.env.RENDER) {
     return;
   }
 
@@ -130,6 +129,14 @@ function openBrowser(url) {
 }
 
 async function installAndBuild() {
+  if (process.env.RENDER) {
+    const indexFile = path.join(distDir, "index.html");
+    if (await pathExists(indexFile)) {
+      console.log("Render environment detected and dist/index.html exists. Skipping redundant build step.");
+      return;
+    }
+  }
+
   await runCommand(npmCmd, ["install"], "Installing dependencies");
   await runCommand(npmCmd, ["run", "build"], "Building production bundle");
 
@@ -368,8 +375,12 @@ function startServer() {
     console.log(`Local URL: ${localUrl}`);
     console.log(`LAN URL:   ${lanUrl}`);
     console.log("\nIf the browser warns about the certificate, continue so camera access can work.");
-    console.log("\nScan this QR code from your phone:");
-    qrcodeTerminal.generate(lanUrl, { small: true });
+
+    if (!process.env.RENDER) {
+        console.log("\nScan this QR code from your phone:");
+        qrcodeTerminal.generate(lanUrl, { small: true });
+    }
+
     console.log("\nPress Ctrl+C to stop the server.");
 
     openBrowser(localUrl);
