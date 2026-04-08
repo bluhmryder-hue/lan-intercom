@@ -1,3 +1,4 @@
+import { useLocalStorage } from "./hooks/useLocalStorage";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import PeerList from "./components/PeerList";
 import VideoFeed from "./components/VideoFeed";
@@ -9,14 +10,6 @@ const OFFLINE_DELAY_MS = 5000;
 
 type PresenceMode = "basic" | "loud";
 type RemotePresence = "idle" | "connecting" | "connected" | "offline";
-
-function readBoolean(key: string, fallback: boolean) {
-  const value = localStorage.getItem(key);
-  if (value === null) {
-    return fallback;
-  }
-  return value === "true";
-}
 
 function playConnectChime() {
   const audioContext = new window.AudioContext();
@@ -69,23 +62,15 @@ function formatPresenceLabel(mode: PresenceMode, state: RemotePresence) {
 }
 
 export default function App() {
-  const [displayName, setDisplayName] = useState(
-    () => localStorage.getItem("lan-intercom:name") ?? DEFAULT_NAME
-  );
+  const [displayName, setDisplayName] = useLocalStorage("lan-intercom:name", DEFAULT_NAME);
   const [status, setStatus] = useState("Idle");
   const [error, setError] = useState<string | null>(null);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [peers, setPeers] = useState<PeerViewModel[]>([]);
   const [running, setRunning] = useState(false);
-  const [presenceMode, setPresenceMode] = useState<PresenceMode>(
-    () => (localStorage.getItem("lan-intercom:presence-mode") as PresenceMode) ?? "basic"
-  );
-  const [autoOfflineTimeout, setAutoOfflineTimeout] = useState(() =>
-    readBoolean("lan-intercom:auto-offline", true)
-  );
-  const [connectChime, setConnectChime] = useState(() =>
-    readBoolean("lan-intercom:connect-chime", true)
-  );
+  const [presenceMode, setPresenceMode] = useLocalStorage<PresenceMode>("lan-intercom:presence-mode", "basic");
+  const [autoOfflineTimeout, setAutoOfflineTimeout] = useLocalStorage("lan-intercom:auto-offline", true);
+  const [connectChime, setConnectChime] = useLocalStorage("lan-intercom:connect-chime", true);
   const [remotePresence, setRemotePresence] = useState<RemotePresence>("idle");
   const cleanupRef = useRef<null | (() => void)>(null);
   const offlineTimerRef = useRef<number | null>(null);
@@ -123,22 +108,6 @@ export default function App() {
 
     return "offline";
   }, [peers]);
-
-  useEffect(() => {
-    localStorage.setItem("lan-intercom:name", displayName);
-  }, [displayName]);
-
-  useEffect(() => {
-    localStorage.setItem("lan-intercom:presence-mode", presenceMode);
-  }, [presenceMode]);
-
-  useEffect(() => {
-    localStorage.setItem("lan-intercom:auto-offline", String(autoOfflineTimeout));
-  }, [autoOfflineTimeout]);
-
-  useEffect(() => {
-    localStorage.setItem("lan-intercom:connect-chime", String(connectChime));
-  }, [connectChime]);
 
   useEffect(() => {
     if (offlineTimerRef.current !== null) {
