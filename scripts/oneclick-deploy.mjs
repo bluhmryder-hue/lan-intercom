@@ -1,4 +1,5 @@
 import https from "node:https";
+import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import fs from "node:fs";
@@ -163,71 +164,79 @@ async function startServer() {
   const rootPrefix = `${root}${path.sep}`;
   const rooms = new Map();
 
-  const cert = selfsigned.generate(
-    [{ name: "commonName", value: "lan-p2p-intercom.local" }],
-    {
-      algorithm: "sha256",
-      days: 1,
-      keySize: 2048,
-    }
-  );
+  const serverHandler = async (req, res) => {
+    try {
+      const protocol = isRender ? "http" : "https";
+      const requestUrl = new URL(req.url ?? "/", `${protocol}://${req.headers.host ?? "localhost"}`);
+      let pathname = decodeURIComponent(requestUrl.pathname);
 
-  const server = https.createServer(
-    {
-      key: cert.private,
-      cert: cert.cert,
-    },
-    async (req, res) => {
+      if (pathname === "/") {
+        pathname = "/index.html";
+      }
+
+      let filePath = path.resolve(root, `.${pathname}`);
+      if (filePath !== root && !filePath.startsWith(rootPrefix)) {
+        res.writeHead(403, { "Content-Type": "text/plain; charset=utf-8" });
+        res.end("Forbidden");
+        return;
+      }
+
+      let stat = null;
       try {
-        const requestUrl = new URL(req.url ?? "/", `https://${req.headers.host ?? "localhost"}`);
-        let pathname = decodeURIComponent(requestUrl.pathname);
+        stat = await fsp.stat(filePath);
+      } catch {
+        stat = null;
+      }
 
-        if (pathname === "/") {
-          pathname = "/index.html";
-        }
+      if (stat?.isDirectory()) {
+        filePath = path.join(filePath, "index.html");
+        stat = null;
+      }
 
-        let filePath = path.resolve(root, `.${pathname}`);
-        if (filePath !== root && !filePath.startsWith(rootPrefix)) {
-          res.writeHead(403, { "Content-Type": "text/plain; charset=utf-8" });
-          res.end("Forbidden");
+      if (!stat) {
+        if (path.extname(pathname)) {
+          res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+          res.end("Not found");
           return;
         }
 
-        let stat = null;
-        try {
-          stat = await fsp.stat(filePath);
-        } catch {
-          stat = null;
-        }
-
-        if (stat?.isDirectory()) {
-          filePath = path.join(filePath, "index.html");
-          stat = null;
-        }
-
-        if (!stat) {
-          if (path.extname(pathname)) {
-            res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
-            res.end("Not found");
-            return;
-          }
-
-          filePath = path.join(root, "index.html");
-        }
-
-        const body = await fsp.readFile(filePath);
-        res.writeHead(200, {
-          "Content-Length": body.length,
-          "Content-Type": mimeType(filePath),
-        });
-        res.end(body);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "Unknown server error";
-        res.writeHead(500, { "Content-Type": "text/plain; charset=utf-8" });
-        res.end(message);
+        filePath = path.join(root, "index.html");
       }
+
+      const body = await fsp.readFile(filePath);
+      res.writeHead(200, {
+        "Content-Length": body.length,
+        "Content-Type": mimeType(filePath),
+      });
+      res.end(body);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown server error";
+      res.writeHead(500, { "Content-Type": "text/plain; charset=utf-8" });
+      res.end(message);
     }
-  );
+  };
+
+  let server;
+  if (isRender) {
+    // Render handles TLS at the edge, so we run plain HTTP internally.
+    server = http.createServer(serverHandler);
+  } else {
+    const cert = selfsigned.generate(
+      [{ name: "commonName", value: "lan-p2p-intercom.local" }],
+      {
+        algorithm: "sha256",
+        days: 1,
+        keySize: 2048,
+      }
+    );
+    server = https.createServer(
+      {
+        key: cert.private,
+        cert: cert.cert,
+      },
+      serverHandler
+    );
+  }
 
   const wss = new WebSocketServer({ noServer: true });
 
@@ -360,7 +369,8 @@ async function startServer() {
   });
 
   server.on("upgrade", (req, socket, head) => {
-    const requestUrl = new URL(req.url ?? "/", `https://${req.headers.host ?? "localhost"}`);
+    const protocol = isRender ? "http" : "https";
+    const requestUrl = new URL(req.url ?? "/", `${protocol}://${req.headers.host ?? "localhost"}`);
     if (requestUrl.pathname !== "/signal") {
       socket.destroy();
       return;
@@ -373,15 +383,16 @@ async function startServer() {
 
   server.listen(port, host, () => {
     const lanIp = getLanIp();
-    const localUrl = `https://localhost:${port}`;
-    const lanUrl = lanIp ? `https://${lanIp}:${port}` : localUrl;
+    const protocol = isRender ? "http" : "https";
+    const localUrl = `${protocol}://localhost:${port}`;
+    const lanUrl = lanIp ? `${protocol}://${lanIp}:${port}` : localUrl;
 
     console.log("\nOne-click deploy is live.");
     console.log(`Local URL: ${localUrl}`);
     console.log(`LAN URL:   ${lanUrl}`);
 
     if (isRender) {
-      console.log("\nService is running on Render.");
+      console.log("\nService is running on Render (HTTP).");
     } else {
       console.log("\nIf the browser warns about the certificate, continue so camera access can work.");
       console.log("\nScan this QR code from your phone:");
