@@ -6,7 +6,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "deploy": "node scripts/oneclick-deploy.mjs"
+    "deploy": "node scripts/oneclick-deploy.mjs",
+    "test": "vitest run"
   },
   "dependencies": {
     "qrcode-terminal": "^0.12.0",
@@ -20,8 +21,7 @@
     "@types/react": "^18.2.14",
     "@types/react-dom": "^18.2.7",
     "@vitejs/plugin-react": "^4.2.0",
-    "vite": "^5.3.0"
+    "vite": "^5.3.0",
+    "vitest": "^1.6.0"
   }
 }
-
-
