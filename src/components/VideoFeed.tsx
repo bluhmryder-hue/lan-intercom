@@ -23,7 +23,7 @@ export default function VideoFeed({ stream, name, muted = false, badge, classNam
   }, [stream]);
 
   return (
-    <div className={`relative overflow-hidden rounded-xl bg-slate-900 aspect-video ${className}`}>
+    <div className={`relative overflow-hidden rounded-2xl bg-slate-900 aspect-video group ${className}`}>
       {stream ? (
         <video
           ref={videoRef}
@@ -33,18 +33,23 @@ export default function VideoFeed({ stream, name, muted = false, badge, classNam
           className="w-full h-full object-cover"
         />
       ) : (
-        <div className="flex flex-col items-center justify-center w-full h-full text-slate-500">
-          <CameraOff size={48} className="mb-2 opacity-20" />
-          <span className="text-sm font-medium">Camera Offline</span>
+        <div className="flex flex-col items-center justify-center w-full h-full text-slate-600 bg-slate-800/50">
+          <CameraOff size={40} className="mb-2 opacity-30 group-hover:scale-110 transition-transform" />
+          <span className="text-xs font-bold uppercase tracking-widest opacity-40">Offline</span>
         </div>
       )}
 
-      <div className="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black/60 to-transparent">
+      <div className="absolute inset-x-0 bottom-0 p-4 bg-gradient-to-t from-black/80 via-black/40 to-transparent">
         <div className="flex items-center justify-between">
-          <span className="text-white text-sm font-semibold truncate">{name}</span>
+          <div className="flex flex-col">
+            <span className="text-white text-sm font-bold truncate max-w-[150px] sm:max-w-[200px]">{name}</span>
+            {badge === 'connected' && (
+              <span className="text-emerald-400 text-[10px] font-bold uppercase tracking-tighter">Live Connection</span>
+            )}
+          </div>
           {badge && (
-            <span className={`px-2 py-0.5 text-[10px] uppercase tracking-wider font-bold rounded-full ${
-              badge === 'connected' ? 'bg-emerald-500 text-white' : 'bg-slate-700 text-slate-300'
+            <span className={`px-2.5 py-1 text-[10px] uppercase tracking-wider font-black rounded-lg ${
+              badge === 'connected' ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20' : 'bg-slate-800 text-slate-400'
             }`}>
               {badge}
             </span>
