@@ -1,15 +1,15 @@
-#!/usr/bin/env node
+import { spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import fsp from "node:fs/promises";
 import https from "node:https";
 import os from "node:os";
 import path from "node:path";
-import { randomUUID } from "node:crypto";
-import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import qrcodeTerminal from "qrcode-terminal";
 import selfsigned from "selfsigned";
 import { WebSocket, WebSocketServer } from "ws";
+import Bonjour from "bonjour-service";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -125,7 +125,7 @@ function openBrowser(url) {
     });
     child.unref();
   } catch {
-    // If the desktop browser cannot be opened, the URLs and QR code still work.
+    // URLs and QR code still work.
   }
 }
 
@@ -146,17 +146,13 @@ async function installAndBuild() {
 
 function makeCertificate() {
   return selfsigned.generate(
-    [{ name: "commonName", value: "lan-p2p-intercom.local" }],
+    [{ name: "commonName", value: "echolan.local" }],
     {
       algorithm: "sha256",
-      days: 1,
+      days: 365,
       keySize: 2048,
     }
   );
-}
-
-function createRoomState() {
-  return new Map();
 }
 
 function startServer() {
@@ -164,6 +160,7 @@ function startServer() {
   const rootPrefix = `${root}${path.sep}`;
   const rooms = new Map();
   const cert = makeCertificate();
+  const bonjour = new Bonjour();
 
   const server = https.createServer(
     {
@@ -226,7 +223,7 @@ function startServer() {
 
   const getRoom = (roomId) => {
     if (!rooms.has(roomId)) {
-      rooms.set(roomId, createRoomState());
+      rooms.set(roomId, new Map());
     }
     return rooms.get(roomId);
   };
@@ -369,23 +366,25 @@ function startServer() {
     const localUrl = `https://localhost:${port}`;
     const lanUrl = lanIp ? `https://${lanIp}:${port}` : localUrl;
 
-    console.log("\nOne-click deploy is live.");
+    console.log("\nEchoLAN One-click deploy is live.");
     console.log(`Local URL: ${localUrl}`);
     console.log(`LAN URL:   ${lanUrl}`);
-    console.log("\nIf the browser warns about the certificate, continue so camera access can work.");
 
     if (!process.env.RENDER) {
       console.log("\nScan this QR code from your phone:");
       qrcodeTerminal.generate(lanUrl, { small: true });
+
+      // Advertise service via mDNS
+      bonjour.publish({ name: 'EchoLAN Server', type: 'echolan', protocol: 'tcp', port: port });
+      console.log("mDNS: Advertising EchoLAN Server on the LAN...");
     }
 
     console.log("\nPress Ctrl+C to stop the server.");
-
     openBrowser(localUrl);
   });
 
   server.on("error", (error) => {
-    console.error("Failed to start the LAN server.");
+    console.error("Failed to start the EchoLAN server.");
     console.error(error);
     process.exitCode = 1;
   });

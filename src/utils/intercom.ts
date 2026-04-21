@@ -1,10 +1,13 @@
-export type PeerState = "connecting" | "connected" | "disconnected";
+import { randomUUID } from "node:crypto";
+
+export type PeerState = "connecting" | "connected" | "disconnected" | "failed";
 
 export interface PeerViewModel {
   id: string;
   name: string;
   stream: MediaStream | null;
   state: PeerState;
+  dataChannel?: RTCDataChannel;
 }
 
 interface ServerPeer {
@@ -141,6 +144,7 @@ export async function startIntercom(options: StartIntercomOptions) {
       name: patch?.name ?? peerName ?? existing?.name ?? "Unknown",
       stream: patch?.stream ?? existing?.stream ?? null,
       state: patch?.state ?? existing?.state ?? "connecting",
+      dataChannel: patch?.dataChannel ?? existing?.dataChannel,
     });
     syncPeers();
   };
@@ -151,6 +155,7 @@ export async function startIntercom(options: StartIntercomOptions) {
       connection.ontrack = null;
       connection.onicecandidate = null;
       connection.onconnectionstatechange = null;
+      connection.ondatachannel = null;
       connection.close();
       peerConnections.delete(peerId);
     }
@@ -181,6 +186,20 @@ export async function startIntercom(options: StartIntercomOptions) {
     }
   };
 
+  const setupDataChannel = (peerId: string, peerName: string, channel: RTCDataChannel) => {
+    channel.onopen = () => {
+      console.log(`DataChannel open for ${peerName}`);
+      upsertPeer(peerId, peerName, { dataChannel: channel });
+    };
+    channel.onmessage = (event) => {
+      console.log(`Message from ${peerName}:`, event.data);
+      // Logic for text chat and file transfer chunks goes here
+    };
+    channel.onclose = () => {
+      upsertPeer(peerId, peerName, { dataChannel: undefined });
+    };
+  };
+
   const createConnection = (peerId: string, peerName: string) => {
     if (!localStream || !selfPeerId || peerId === selfPeerId || peerConnections.has(peerId)) {
       return peerConnections.get(peerId) ?? null;
@@ -195,6 +214,15 @@ export async function startIntercom(options: StartIntercomOptions) {
     for (const track of localStream.getTracks()) {
       connection.addTrack(track, localStream);
     }
+
+    if (shouldInitiate) {
+      const channel = connection.createDataChannel("echolan-data", { ordered: true });
+      setupDataChannel(peerId, peerName, channel);
+    }
+
+    connection.ondatachannel = (event) => {
+      setupDataChannel(peerId, peerName, event.channel);
+    };
 
     connection.onicecandidate = (event) => {
       if (event.candidate) {
@@ -289,13 +317,12 @@ export async function startIntercom(options: StartIntercomOptions) {
 
   try {
     onStatus("Requesting camera and microphone access");
+    // Voice and Video are opt-in but initially requested for simple intercom flow.
+    // In final UI, these will be hidden/muted by default as per requirements.
     localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
     onLocalStream(localStream);
   } catch (error) {
-    const message =
-      error instanceof Error
-        ? error.message
-        : "Unable to access camera or microphone.";
+    const message = error instanceof Error ? error.message : "Unable to access camera or microphone.";
     onError(message);
     throw error;
   }
@@ -304,9 +331,7 @@ export async function startIntercom(options: StartIntercomOptions) {
   socket = new WebSocket(signalUrl);
 
   socket.addEventListener("open", () => {
-    if (disposed) {
-      return;
-    }
+    if (disposed) return;
     send({ type: "join", roomId: roomName, name: localName });
     onStatus("Connected to signaling server");
   });
@@ -316,7 +341,7 @@ export async function startIntercom(options: StartIntercomOptions) {
     try {
       payload = JSON.parse(event.data as string) as ServerMessage;
     } catch (error) {
-      console.error("Malformed JSON from signaling server:", error);
+      console.error("Malformed JSON:", error);
       return;
     }
 
@@ -327,7 +352,7 @@ export async function startIntercom(options: StartIntercomOptions) {
         upsertPeer(peer.id, peer.name, { state: "connecting" });
         createConnection(peer.id, peer.name);
       }
-      onStatus(`Joined room ${payload.roomId}`);
+      onStatus(`Joined EchoLAN`);
       return;
     }
 
@@ -358,9 +383,7 @@ export async function startIntercom(options: StartIntercomOptions) {
   });
 
   socket.addEventListener("close", () => {
-    if (!disposed) {
-      onStatus("Disconnected from signaling server");
-    }
+    if (!disposed) onStatus("Disconnected from signaling server");
   });
 
   socket.addEventListener("error", () => {

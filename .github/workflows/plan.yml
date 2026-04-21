@@ -1,0 +1,14 @@
+name: "Phase 2: Plan"
+on:
+  workflow_run:
+    workflows: ["Phase 1: Analyze"]
+    types: [completed]
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create Plan
+        run: |
+          echo "Generating execution plan..."

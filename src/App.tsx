@@ -1,76 +1,38 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import PeerList from "./components/PeerList";
+import React, { useState, useEffect, useRef, useMemo } from "react";
+import {
+  Settings,
+  Video,
+  VideoOff,
+  Mic,
+  MicOff,
+  MessageSquare,
+  Files,
+  LogOut,
+  Monitor,
+  Bell,
+  Shield,
+  Activity,
+  User
+} from "lucide-react";
+import { startIntercom, PeerViewModel } from "./utils/intercom";
 import VideoFeed from "./components/VideoFeed";
-import { PeerViewModel, startIntercom } from "./utils/intercom";
+import PeerList from "./components/PeerList";
 
 const DEFAULT_NAME = "LAN Peer";
-const CALL_ID = "intercom";
-const OFFLINE_DELAY_MS = 5000;
+const CALL_ID = "main";
+const OFFLINE_DELAY_MS = 2000;
 
 type PresenceMode = "basic" | "loud";
 type RemotePresence = "idle" | "connecting" | "connected" | "offline";
 
-function readBoolean(key: string, fallback: boolean) {
+function readBoolean(key: string, defaultValue: boolean): boolean {
   const value = localStorage.getItem(key);
-  if (value === null) {
-    return fallback;
-  }
-  return value === "true";
-}
-
-function playConnectChime() {
-  const audioContext = new window.AudioContext();
-  const gain = audioContext.createGain();
-  gain.gain.value = 0.0001;
-  gain.connect(audioContext.destination);
-
-  const tones = [784, 988];
-  tones.forEach((frequency, index) => {
-    const oscillator = audioContext.createOscillator();
-    oscillator.type = "sine";
-    oscillator.frequency.value = frequency;
-    oscillator.connect(gain);
-    oscillator.start(audioContext.currentTime + index * 0.12);
-    oscillator.stop(audioContext.currentTime + index * 0.12 + 0.08);
-  });
-
-  gain.gain.exponentialRampToValueAtTime(0.08, audioContext.currentTime + 0.02);
-  gain.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + 0.35);
-
-  window.setTimeout(() => {
-    void audioContext.close();
-  }, 500);
-}
-
-function formatPresenceLabel(mode: PresenceMode, state: RemotePresence) {
-  if (mode === "loud") {
-    switch (state) {
-      case "connecting":
-        return "Ringing";
-      case "connected":
-        return "Busy";
-      case "offline":
-        return "Available";
-      default:
-        return "Available";
-    }
-  }
-
-  switch (state) {
-    case "connecting":
-      return "Connecting to remote device";
-    case "connected":
-      return "Remote device connected";
-    case "offline":
-      return "Remote device offline";
-    default:
-      return "No remote device";
-  }
+  return value === null ? defaultValue : value === "true";
 }
 
 export default function App() {
   const [displayName, setDisplayName] = useState(
-    () => localStorage.getItem("lan-intercom:name") ?? DEFAULT_NAME
+    () => localStorage.getItem("echolan:name") ?? DEFAULT_NAME
   );
   const [status, setStatus] = useState("Idle");
   const [error, setError] = useState<string | null>(null);
@@ -78,67 +40,45 @@ export default function App() {
   const [peers, setPeers] = useState<PeerViewModel[]>([]);
   const [running, setRunning] = useState(false);
   const [presenceMode, setPresenceMode] = useState<PresenceMode>(
-    () => (localStorage.getItem("lan-intercom:presence-mode") as PresenceMode) ?? "basic"
+    () => (localStorage.getItem("echolan:presence-mode") as PresenceMode) ?? "basic"
   );
   const [autoOfflineTimeout, setAutoOfflineTimeout] = useState(() =>
-    readBoolean("lan-intercom:auto-offline", true)
+    readBoolean("echolan:auto-offline", true)
   );
   const [connectChime, setConnectChime] = useState(() =>
-    readBoolean("lan-intercom:connect-chime", true)
+    readBoolean("echolan:connect-chime", true)
   );
   const [remotePresence, setRemotePresence] = useState<RemotePresence>("idle");
   const cleanupRef = useRef<null | (() => void)>(null);
   const offlineTimerRef = useRef<number | null>(null);
-  const wasConnectedRef = useRef(false);
 
   const signalUrl = useMemo(() => {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     return `${protocol}//${window.location.host}/signal`;
   }, []);
 
-  const connectionState = useMemo(() => {
-    const label = formatPresenceLabel(presenceMode, remotePresence);
-    const tone =
-      remotePresence === "connected"
-        ? "live"
-        : remotePresence === "connecting"
-          ? "connecting"
-          : "idle";
-
-    return { label, tone };
-  }, [presenceMode, remotePresence]);
-
-  const rawPresence = useMemo<RemotePresence>(() => {
-    if (!peers.length) {
-      return "idle";
-    }
-
-    if (peers.some((peer) => peer.state === "connected")) {
-      return "connected";
-    }
-
-    if (peers.some((peer) => peer.state === "connecting")) {
-      return "connecting";
-    }
-
-    return "offline";
-  }, [peers]);
-
   useEffect(() => {
-    localStorage.setItem("lan-intercom:name", displayName);
+    localStorage.setItem("echolan:name", displayName);
   }, [displayName]);
 
   useEffect(() => {
-    localStorage.setItem("lan-intercom:presence-mode", presenceMode);
+    localStorage.setItem("echolan:presence-mode", presenceMode);
   }, [presenceMode]);
 
   useEffect(() => {
-    localStorage.setItem("lan-intercom:auto-offline", String(autoOfflineTimeout));
+    localStorage.setItem("echolan:auto-offline", String(autoOfflineTimeout));
   }, [autoOfflineTimeout]);
 
   useEffect(() => {
-    localStorage.setItem("lan-intercom:connect-chime", String(connectChime));
+    localStorage.setItem("echolan:connect-chime", String(connectChime));
   }, [connectChime]);
+
+  const rawPresence = useMemo<RemotePresence>(() => {
+    if (!peers.length) return "idle";
+    if (peers.some((peer) => peer.state === "connected")) return "connected";
+    if (peers.some((peer) => peer.state === "connecting")) return "connecting";
+    return "offline";
+  }, [peers]);
 
   useEffect(() => {
     if (offlineTimerRef.current !== null) {
@@ -148,14 +88,8 @@ export default function App() {
 
     if (rawPresence === "connected") {
       setRemotePresence("connected");
-      if (!wasConnectedRef.current && connectChime) {
-        playConnectChime();
-      }
-      wasConnectedRef.current = true;
       return;
     }
-
-    wasConnectedRef.current = false;
 
     if (rawPresence === "connecting") {
       setRemotePresence("connecting");
@@ -175,16 +109,7 @@ export default function App() {
     }
 
     setRemotePresence("idle");
-  }, [autoOfflineTimeout, connectChime, rawPresence]);
-
-  useEffect(() => {
-    return () => {
-      if (offlineTimerRef.current !== null) {
-        window.clearTimeout(offlineTimerRef.current);
-      }
-      cleanupRef.current?.();
-    };
-  }, []);
+  }, [autoOfflineTimeout, rawPresence]);
 
   const handleJoin = async () => {
     setError(null);
@@ -206,8 +131,7 @@ export default function App() {
         },
       });
     } catch (nextError) {
-      const message =
-        nextError instanceof Error ? nextError.message : "Failed to join the intercom.";
+      const message = nextError instanceof Error ? nextError.message : "Failed to join.";
       setError(message);
       setStatus(message);
       setRunning(false);
@@ -224,141 +148,210 @@ export default function App() {
     setError(null);
   };
 
-  const localFeed = localStream ? (
-    <VideoFeed stream={localStream} name={`${displayName} (you)`} muted />
-  ) : (
-    <div className="empty-feed">
-      <span>Local preview</span>
-      <p>Click Join to grant camera and microphone access.</p>
+  return (
+    <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900">
+      {/* Top Navigation */}
+      <nav className="h-16 bg-white border-b border-slate-200 px-6 flex items-center justify-between sticky top-0 z-50">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 bg-echolan-600 rounded-lg flex items-center justify-center text-white shadow-md shadow-echolan-200">
+            <Shield size={20} />
+          </div>
+          <span className="font-bold text-xl tracking-tight text-slate-800">EchoLAN</span>
+        </div>
+
+        <div className="hidden md:flex items-center gap-6">
+          <a href="#" className="text-sm font-semibold text-echolan-600 border-b-2 border-echolan-600 py-5">Dashboard</a>
+          <a href="#" className="text-sm font-medium text-slate-500 hover:text-slate-800 transition-colors">Messages</a>
+          <a href="#" className="text-sm font-medium text-slate-500 hover:text-slate-800 transition-colors">Files</a>
+          <a href="#" className="text-sm font-medium text-slate-500 hover:text-slate-800 transition-colors">Settings</a>
+        </div>
+
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-full text-slate-600">
+            <Activity size={14} className={running ? "text-emerald-500 animate-pulse" : "text-slate-400"} />
+            <span className="text-xs font-bold uppercase tracking-wider">{status}</span>
+          </div>
+          <button className="p-2 text-slate-400 hover:text-slate-600 transition-colors">
+            <Bell size={20} />
+          </button>
+        </div>
+      </nav>
+
+      <main className="flex-1 flex flex-col md:flex-row overflow-hidden">
+        {/* Left Sidebar */}
+        <aside className="w-full md:w-80 bg-white border-r border-slate-200 p-6 flex flex-col gap-8 overflow-y-auto">
+          <section>
+            <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4">Device Identity</h3>
+            <div className="flex flex-col gap-4">
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                  <User size={16} />
+                </div>
+                <input
+                  value={displayName}
+                  onChange={(e) => setDisplayName(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg py-2 pl-10 pr-3 text-sm focus:ring-2 focus:ring-echolan-500 focus:border-transparent outline-none transition-all font-medium"
+                  placeholder="Set device name..."
+                />
+              </div>
+
+              {!running ? (
+                <button
+                  onClick={handleJoin}
+                  className="w-full bg-echolan-600 hover:bg-echolan-700 text-white font-bold py-2.5 rounded-lg shadow-lg shadow-echolan-100 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+                >
+                  <Wifi size={18} />
+                  Connect to LAN
+                </button>
+              ) : (
+                <button
+                  onClick={handleLeave}
+                  className="w-full bg-white border border-rose-200 text-rose-600 hover:bg-rose-50 font-bold py-2.5 rounded-lg transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+                >
+                  <LogOut size={18} />
+                  Disconnect
+                </button>
+              )}
+            </div>
+          </section>
+
+          <PeerList peers={peers} />
+
+          <section className="mt-auto">
+            <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
+              <p className="text-xs text-slate-500 leading-relaxed italic">
+                <strong>First run?</strong> If you see a certificate warning, click 'Advanced' and proceed. Camera/Mic require HTTPS.
+              </p>
+            </div>
+          </section>
+        </aside>
+
+        {/* Content Area */}
+        <section className="flex-1 p-6 md:p-8 bg-slate-50 overflow-y-auto">
+          {error && (
+            <div className="mb-6 p-4 bg-rose-50 border border-rose-100 text-rose-700 rounded-xl flex items-center gap-3">
+              <Shield size={20} className="shrink-0" />
+              <p className="text-sm font-medium">{error}</p>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            {/* Local Feed */}
+            <div className="flex flex-col gap-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Monitor size={20} className="text-slate-400" />
+                  <h2 className="font-bold text-slate-800">Local Environment</h2>
+                </div>
+                <div className="flex items-center gap-1">
+                  <button className="p-2 bg-white border border-slate-200 rounded-lg text-slate-400 hover:text-echolan-600 transition-colors">
+                    <MicOff size={18} />
+                  </button>
+                  <button className="p-2 bg-white border border-slate-200 rounded-lg text-slate-400 hover:text-echolan-600 transition-colors">
+                    <VideoOff size={18} />
+                  </button>
+                </div>
+              </div>
+              <VideoFeed
+                stream={localStream}
+                name={`${displayName} (You)`}
+                muted
+                className="shadow-2xl shadow-slate-200 border-4 border-white"
+              />
+            </div>
+
+            {/* Remote Feed */}
+            <div className="flex flex-col gap-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Activity size={20} className="text-slate-400" />
+                  <h2 className="font-bold text-slate-800">Remote Peer</h2>
+                </div>
+                <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                  <span className={`w-2 h-2 rounded-full ${remotePresence === 'connected' ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'}`} />
+                  {remotePresence === 'connected' ? 'Secure Link Active' : 'Offline'}
+                </div>
+              </div>
+              {peers.length > 0 ? (
+                peers.map(peer => (
+                  <VideoFeed
+                    key={peer.id}
+                    stream={peer.stream}
+                    name={peer.name}
+                    badge={peer.state}
+                    className="shadow-2xl shadow-slate-200 border-4 border-white"
+                  />
+                ))
+              ) : (
+                <div className="aspect-video bg-white rounded-xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center p-8 text-center">
+                  <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center text-slate-300 mb-4">
+                    <Wifi size={32} />
+                  </div>
+                  <h4 className="font-bold text-slate-700 mb-2">Awaiting Peer</h4>
+                  <p className="text-sm text-slate-500 max-w-xs mx-auto leading-relaxed">
+                    Once another device on the LAN connects, their encrypted media feed will appear here automatically.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Quick Actions / Status */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-12">
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4 group hover:border-echolan-300 transition-colors cursor-pointer">
+              <div className="p-3 bg-echolan-50 rounded-xl text-echolan-600 group-hover:scale-110 transition-transform">
+                <MessageSquare size={24} />
+              </div>
+              <div>
+                <h4 className="font-bold text-slate-800">Local Chat</h4>
+                <p className="text-xs text-slate-500 font-medium">Text, Emoji, Commands</p>
+              </div>
+            </div>
+
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4 group hover:border-echolan-300 transition-colors cursor-pointer">
+              <div className="p-3 bg-emerald-50 rounded-xl text-emerald-600 group-hover:scale-110 transition-transform">
+                <Files size={24} />
+              </div>
+              <div>
+                <h4 className="font-bold text-slate-800">P2P Files</h4>
+                <p className="text-xs text-slate-500 font-medium">Send up to 2GB Securely</p>
+              </div>
+            </div>
+
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4 group hover:border-echolan-300 transition-colors cursor-pointer">
+              <div className="p-3 bg-amber-50 rounded-xl text-amber-600 group-hover:scale-110 transition-transform">
+                <Settings size={24} />
+              </div>
+              <div>
+                <h4 className="font-bold text-slate-800">Advanced</h4>
+                <p className="text-xs text-slate-500 font-medium">mDNS, RTC, Codecs</p>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
     </div>
   );
+}
 
+// Added missing Wifi icon
+function Wifi({ size, className }: { size?: number, className?: string }) {
   return (
-    <main className="app-shell">
-      <section className="hero">
-        <div>
-          <p className="eyebrow">LAN only intercom</p>
-          <h1>Talk to the person in the shop without a cloud call.</h1>
-          <p className="lede">
-            Start the launcher on one machine, open the link on the remote device, and the app
-            connects the two endpoints over a direct LAN signaling path.
-          </p>
-        </div>
-
-        <div className="status-card">
-          <div className={`status-pill ${running ? "live" : "idle"}`}>{status}</div>
-          <div className="status-meta">
-            <span>Signal: {signalUrl}</span>
-            <span>Mode: direct call</span>
-            <span>Remote: {connectionState.label}</span>
-            <span>Peers: {peers.length}</span>
-          </div>
-          <div className={`presence-chip ${connectionState.tone}`}>
-            <span className="presence-dot" />
-            {connectionState.label}
-          </div>
-        </div>
-      </section>
-
-      <section className="controls">
-        <label>
-          Device name
-          <input
-            value={displayName}
-            onChange={(event) => setDisplayName(event.target.value)}
-            placeholder="LAN Peer"
-          />
-        </label>
-
-        <div className="control-actions">
-          <button onClick={handleJoin} disabled={running}>
-            Connect
-          </button>
-          <button onClick={handleLeave} className="ghost" disabled={!running}>
-            Leave
-          </button>
-        </div>
-      </section>
-
-      <section className="settings-grid">
-        <article className="feed-card">
-          <div className="card-head">
-            <h2>Presence options</h2>
-            <span>Simple by default</span>
-          </div>
-
-          <label className="setting-row">
-            <span>Presence style</span>
-            <select value={presenceMode} onChange={(event) => setPresenceMode(event.target.value as PresenceMode)}>
-              <option value="basic">Basic status labels</option>
-              <option value="loud">Ringing / available / busy</option>
-            </select>
-          </label>
-
-          <label className="setting-toggle">
-            <input
-              type="checkbox"
-              checked={autoOfflineTimeout}
-              onChange={(event) => setAutoOfflineTimeout(event.target.checked)}
-            />
-            <span>Auto-offline timeout</span>
-          </label>
-
-          <label className="setting-toggle">
-            <input
-              type="checkbox"
-              checked={connectChime}
-              onChange={(event) => setConnectChime(event.target.checked)}
-            />
-            <span>Play connect chime</span>
-          </label>
-        </article>
-      </section>
-
-      {error ? <div className="error-banner">{error}</div> : null}
-
-      <section className="feeds">
-        <article className="feed-card">
-          <div className="card-head">
-            <h2>Local feed</h2>
-            <span>Your camera and microphone</span>
-          </div>
-          {localFeed}
-        </article>
-
-        <article className="feed-card">
-          <div className="card-head">
-            <h2>Remote device</h2>
-            <span>The other end of the call</span>
-          </div>
-          <div className="peer-grid">
-            {peers.length ? (
-              peers.map((peer) => (
-                <VideoFeed
-                  key={peer.id}
-                  stream={peer.stream}
-                  name={peer.name}
-                  muted={false}
-                  badge={peer.state}
-                />
-              ))
-            ) : (
-              <div className="empty-feed">
-                <span>No remote device connected yet</span>
-                <p>Open the LAN URL on the other device and tap Connect.</p>
-              </div>
-            )}
-          </div>
-        </article>
-      </section>
-
-      <section className="sidebar">
-        <PeerList peers={peers.slice(0, 1)} />
-        <div className="hint">
-          <strong>First run:</strong> if the browser shows a certificate warning, continue to the
-          site so camera and microphone access can work over secure LAN HTTPS.
-        </div>
-      </section>
-    </main>
+    <svg
+      width={size ?? 24}
+      height={size ?? 24}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <path d="M5 13a10 10 0 0 1 14 0" />
+      <path d="M8.5 16.5a5 5 0 0 1 7 0" />
+      <path d="M2 8a15 15 0 0 1 20 0" />
+      <line x1="12" x2="12.01" y1="20" y2="20" />
+    </svg>
   );
 }
