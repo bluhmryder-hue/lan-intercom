@@ -1,0 +1,16 @@
+name: "Phase 4: Dispatch"
+on:
+  workflow_run:
+    workflows: ["Phase 3: Validate"]
+    types: [completed]
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fleet Dispatch
+        env:
+          JULES_API_KEY: ${{ secrets.JULES_API_KEY }}
+        run: |
+          node scripts/fleet/dispatch.mjs

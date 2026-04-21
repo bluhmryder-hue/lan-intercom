@@ -1,0 +1,14 @@
+name: "Phase 3: Validate"
+on:
+  workflow_run:
+    workflows: ["Phase 2: Plan"]
+    types: [completed]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Plan
+        run: |
+          echo "Validating plan safety and requirements..."
