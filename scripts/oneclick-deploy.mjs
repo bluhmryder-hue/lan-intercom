@@ -7,12 +7,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import net from "node:net";
-import qrcodeTerminal from "qrcode-terminal";
-import selfsigned from "selfsigned";
-import { WebSocket, WebSocketServer } from "ws";
-import BonjourPkg from "bonjour-service";
 
-const Bonjour = BonjourPkg.default || BonjourPkg;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const projectRoot = path.resolve(__dirname, "..");
@@ -134,23 +129,28 @@ function openBrowser(url) {
   }
 }
 
-async function installAndBuild() {
+async function installDependenciesIfNeeded() {
+  const nodeModulesPath = path.join(projectRoot, "node_modules");
+  if (!(await pathExists(nodeModulesPath))) {
+    await runCommand(npmCmd, ["install"], "Installing dependencies");
+  }
+}
+
+async function buildIfNeeded() {
   const indexFile = path.join(distDir, "index.html");
   if (await pathExists(indexFile)) {
     console.log("[INFO] Build artifact found, skipping build step.");
     return;
   }
 
+  // Ensure dependencies are installed before building
+  await installDependenciesIfNeeded();
+
   try {
-    await runCommand(npmCmd, ["install"], "Installing dependencies");
     await runCommand(npmCmd, ["run", "build"], "Building production bundle");
   } catch (error) {
-    console.error(`\n[FATAL] Dependency installation or build failed.`);
+    console.error(`\n[FATAL] Build failed.`);
     console.error(`Reason: ${error.message}`);
-    console.error(`\nSuggestions:`);
-    console.error(`1. Ensure you have Node.js and NPM installed properly.`);
-    console.error(`2. Try running 'npm install' manually in the project root.`);
-    console.error(`3. Check for any network/firewall issues.`);
     process.exit(1);
   }
 
@@ -160,22 +160,25 @@ async function installAndBuild() {
   }
 }
 
-function makeCertificate() {
-  return selfsigned.generate(
-    [{ name: "commonName", value: "echolan.local" }],
-    {
-      algorithm: "sha256",
-      days: 365,
-      keySize: 2048,
-    }
-  );
-}
+async function startServer() {
+  // Ensure dependencies are installed before importing them dynamically
+  await installDependenciesIfNeeded();
 
-function startServer() {
+  const { default: qrcodeTerminal } = await import("qrcode-terminal");
+  const { default: selfsigned } = await import("selfsigned");
+  const { WebSocket, WebSocketServer } = await import("ws");
+  const { default: BonjourPkg } = await import("bonjour-service");
+  const Bonjour = BonjourPkg.default || BonjourPkg;
+
   const root = path.resolve(distDir);
   const rootPrefix = `${root}${path.sep}`;
   const rooms = new Map();
-  const cert = makeCertificate();
+
+  const cert = selfsigned.generate(
+    [{ name: "commonName", value: "echolan.local" }],
+    { algorithm: "sha256", days: 365, keySize: 2048 }
+  );
+
   const bonjour = new Bonjour();
 
   const server = https.createServer(
@@ -413,8 +416,9 @@ async function main() {
     process.exit(1);
   }
 
-  await installAndBuild();
-  startServer();
+  // Verification: Build or Install as needed
+  await buildIfNeeded();
+  await startServer();
 }
 
 main().catch((error) => {
