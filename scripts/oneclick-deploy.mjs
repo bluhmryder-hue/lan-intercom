@@ -1,16 +1,18 @@
 import { spawn } from "node:child_process";
-import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import fsp from "node:fs/promises";
 import https from "node:https";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { randomUUID } from "node:crypto";
+import net from "node:net";
 import qrcodeTerminal from "qrcode-terminal";
 import selfsigned from "selfsigned";
 import { WebSocket, WebSocketServer } from "ws";
-import Bonjour from "bonjour-service";
+import BonjourPkg from "bonjour-service";
 
+const Bonjour = BonjourPkg.default || BonjourPkg;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const projectRoot = path.resolve(__dirname, "..");
@@ -21,21 +23,38 @@ const npmCmd = process.platform === "win32" ? "npm.cmd" : "npm";
 
 function runCommand(command, args, label) {
   return new Promise((resolve, reject) => {
-    console.log(`\n${label}...`);
+    console.log(`\n[STEP] ${label}...`);
     const child = spawn(command, args, {
       cwd: projectRoot,
       stdio: "inherit",
-      shell: false,
+      shell: process.platform === "win32",
     });
 
-    child.on("error", reject);
+    child.on("error", (err) => {
+      console.error(`[ERROR] Failed to start command: ${command}`);
+      reject(err);
+    });
+
     child.on("close", (code) => {
       if (code === 0) {
+        console.log(`[SUCCESS] ${label} completed.`);
         resolve();
         return;
       }
       reject(new Error(`${label} failed with exit code ${code}`));
     });
+  });
+}
+
+async function isPortAvailable(p) {
+  return new Promise((resolve) => {
+    const server = net.createServer();
+    server.once("error", () => resolve(false));
+    server.once("listening", () => {
+      server.close();
+      resolve(true);
+    });
+    server.listen(p, host);
   });
 }
 
@@ -52,25 +71,14 @@ function getLanIp() {
   let fallback = null;
 
   for (const entries of Object.values(interfaces)) {
-    if (!entries) {
-      continue;
-    }
+    if (!entries) continue;
 
     for (const entry of entries) {
-      if (entry.family !== "IPv4" || entry.internal || !entry.address) {
-        continue;
-      }
-
-      if (isPrivateIpv4(entry.address)) {
-        return entry.address;
-      }
-
-      if (!fallback) {
-        fallback = entry.address;
-      }
+      if (entry.family !== "IPv4" || entry.internal || !entry.address) continue;
+      if (isPrivateIpv4(entry.address)) return entry.address;
+      if (!fallback) fallback = entry.address;
     }
   }
-
   return fallback;
 }
 
@@ -92,7 +100,6 @@ function mimeType(filePath) {
     ".woff": "font/woff",
     ".woff2": "font/woff2",
   };
-
   return map[ext] ?? "application/octet-stream";
 }
 
@@ -106,9 +113,7 @@ async function pathExists(filePath) {
 }
 
 function openBrowser(url) {
-  if (process.env.NO_BROWSER === "1" || process.env.RENDER) {
-    return;
-  }
+  if (process.env.NO_BROWSER === "1" || process.env.RENDER) return;
 
   const browserCommand =
     process.platform === "win32"
@@ -125,22 +130,33 @@ function openBrowser(url) {
     });
     child.unref();
   } catch {
-    // URLs and QR code still work.
+    // Ignore browser open errors
   }
 }
 
 async function installAndBuild() {
   const indexFile = path.join(distDir, "index.html");
   if (await pathExists(indexFile)) {
-    console.log("Build artifact found, skipping build step.");
+    console.log("[INFO] Build artifact found, skipping build step.");
     return;
   }
 
-  await runCommand(npmCmd, ["install"], "Installing dependencies");
-  await runCommand(npmCmd, ["run", "build"], "Building production bundle");
+  try {
+    await runCommand(npmCmd, ["install"], "Installing dependencies");
+    await runCommand(npmCmd, ["run", "build"], "Building production bundle");
+  } catch (error) {
+    console.error(`\n[FATAL] Dependency installation or build failed.`);
+    console.error(`Reason: ${error.message}`);
+    console.error(`\nSuggestions:`);
+    console.error(`1. Ensure you have Node.js and NPM installed properly.`);
+    console.error(`2. Try running 'npm install' manually in the project root.`);
+    console.error(`3. Check for any network/firewall issues.`);
+    process.exit(1);
+  }
 
   if (!(await pathExists(indexFile))) {
-    throw new Error(`Build output not found: ${indexFile}`);
+    console.error(`\n[FATAL] Build output not found at ${indexFile}.`);
+    process.exit(1);
   }
 }
 
@@ -172,9 +188,7 @@ function startServer() {
         const requestUrl = new URL(req.url ?? "/", `https://${req.headers.host ?? "localhost"}`);
         let pathname = decodeURIComponent(requestUrl.pathname);
 
-        if (pathname === "/") {
-          pathname = "/index.html";
-        }
+        if (pathname === "/") pathname = "/index.html";
 
         let filePath = path.resolve(root, `.${pathname}`);
         if (filePath !== root && !filePath.startsWith(rootPrefix)) {
@@ -201,7 +215,6 @@ function startServer() {
             res.end("Not found");
             return;
           }
-
           filePath = path.join(root, "index.html");
         }
 
@@ -230,15 +243,11 @@ function startServer() {
 
   const broadcastRoom = (roomId, payload, ignorePeerId = null) => {
     const room = rooms.get(roomId);
-    if (!room) {
-      return;
-    }
+    if (!room) return;
 
     const message = JSON.stringify(payload);
     for (const peer of room.values()) {
-      if (ignorePeerId && peer.id === ignorePeerId) {
-        continue;
-      }
+      if (ignorePeerId && peer.id === ignorePeerId) continue;
       if (peer.socket.readyState === WebSocket.OPEN) {
         peer.socket.send(message);
       }
@@ -246,14 +255,10 @@ function startServer() {
   };
 
   const unregisterPeer = (peerRecord) => {
-    if (!peerRecord || !peerRecord.roomId) {
-      return;
-    }
+    if (!peerRecord || !peerRecord.roomId) return;
 
     const room = rooms.get(peerRecord.roomId);
-    if (!room || !room.has(peerRecord.id)) {
-      return;
-    }
+    if (!room || !room.has(peerRecord.id)) return;
 
     room.delete(peerRecord.id);
     broadcastRoom(
@@ -323,9 +328,7 @@ function startServer() {
 
       if (payload?.type === "signal") {
         const room = rooms.get(peerRecord.roomId);
-        if (!room || !payload.to || !room.has(payload.to)) {
-          return;
-        }
+        if (!room || !payload.to || !room.has(payload.to)) return;
 
         const target = room.get(payload.to);
         if (target.socket.readyState === WebSocket.OPEN) {
@@ -366,17 +369,23 @@ function startServer() {
     const localUrl = `https://localhost:${port}`;
     const lanUrl = lanIp ? `https://${lanIp}:${port}` : localUrl;
 
-    console.log("\nEchoLAN One-click deploy is live.");
-    console.log(`Local URL: ${localUrl}`);
-    console.log(`LAN URL:   ${lanUrl}`);
+    console.log("\n============================================================");
+    console.log("   EchoLAN One-click deploy is live.");
+    console.log("============================================================\n");
+    console.log(`Local Access: ${localUrl}`);
+    console.log(`LAN Access:   ${lanUrl}`);
 
     if (!process.env.RENDER) {
-      console.log("\nScan this QR code from your phone:");
+      console.log("\nScan this QR code from your phone (ensure you are on the same WiFi):");
       qrcodeTerminal.generate(lanUrl, { small: true });
 
       // Advertise service via mDNS
-      bonjour.publish({ name: 'EchoLAN Server', type: 'echolan', protocol: 'tcp', port: port });
-      console.log("mDNS: Advertising EchoLAN Server on the LAN...");
+      try {
+        bonjour.publish({ name: 'EchoLAN Server', type: 'echolan', protocol: 'tcp', port: port });
+        console.log("\nmDNS: Advertising EchoLAN Server on the LAN...");
+      } catch (err) {
+        console.warn("\nmDNS: Failed to advertise service. This is expected in some sandboxed environments.");
+      }
     }
 
     console.log("\nPress Ctrl+C to stop the server.");
@@ -384,18 +393,31 @@ function startServer() {
   });
 
   server.on("error", (error) => {
-    console.error("Failed to start the EchoLAN server.");
-    console.error(error);
-    process.exitCode = 1;
+    console.error("\n[FATAL] Failed to start the EchoLAN server.");
+    if (error.code === 'EADDRINUSE') {
+      console.error(`Port ${port} is already in use by another application.`);
+      console.error(`Try setting a different port: set PORT=5555 && npm start`);
+    } else {
+      console.error(error.message);
+    }
+    process.exit(1);
   });
 }
 
 async function main() {
+  console.log("\n[INFO] Initializing EchoLAN...");
+
+  if (!(await isPortAvailable(port))) {
+    console.error(`\n[FATAL] Port ${port} is already in use.`);
+    console.error(`Please close the application using this port or use a different PORT environment variable.`);
+    process.exit(1);
+  }
+
   await installAndBuild();
   startServer();
 }
 
 main().catch((error) => {
-  console.error(error instanceof Error ? error.message : error);
+  console.error(`\n[FATAL] ${error.message}`);
   process.exit(1);
 });
