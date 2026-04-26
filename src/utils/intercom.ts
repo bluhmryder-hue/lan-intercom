@@ -85,7 +85,18 @@ type ClientMessage =
       type: "signal";
       to: string;
       signal: SignalPayload;
+    }
+  | {
+      type: "chat";
+      text: string;
     };
+
+export interface ChatMessage {
+  from: string;
+  name: string;
+  text: string;
+  timestamp: string;
+}
 
 interface StartIntercomOptions {
   roomId: string;
@@ -94,6 +105,7 @@ interface StartIntercomOptions {
   onStatus: (status: string) => void;
   onLocalStream: (stream: MediaStream) => void;
   onPeersChange: (peers: PeerViewModel[]) => void;
+  onChatMessage?: (message: ChatMessage) => void;
   onError: (message: string) => void;
 }
 
@@ -118,7 +130,7 @@ function isIceLike(message: SignalPayload): message is Extract<SignalPayload, { 
 }
 
 export async function startIntercom(options: StartIntercomOptions) {
-  const { roomId, displayName, signalUrl, onStatus, onLocalStream, onPeersChange, onError } = options;
+  const { roomId, displayName, signalUrl, onStatus, onLocalStream, onPeersChange, onChatMessage, onError } = options;
   const roomName = roomId.trim() || "main";
   const localName = displayName.trim() || "Guest";
   const peers = new Map<string, PeerViewModel>();
@@ -367,6 +379,16 @@ export async function startIntercom(options: StartIntercomOptions) {
       return;
     }
 
+    if (payload.type === "chat") {
+      onChatMessage?.({
+        from: payload.from,
+        name: payload.name,
+        text: payload.text,
+        timestamp: payload.timestamp,
+      });
+      return;
+    }
+
     if (payload.type === "signal") {
       try {
         await handleSignal(payload);
@@ -392,7 +414,12 @@ export async function startIntercom(options: StartIntercomOptions) {
 
   syncPeers();
 
-  return () => {
+  const sendChatMessage = (text: string) => {
+    send({ type: chat, text });
+  };
+
+  return {
+    destroy: () => {
     disposed = true;
     socket?.close();
     socket = null;
@@ -411,5 +438,7 @@ export async function startIntercom(options: StartIntercomOptions) {
       }
       localStream = null;
     }
+  },
+  sendChatMessage
   };
 }

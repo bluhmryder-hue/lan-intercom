@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import {
   Shield,
-  User,
+  User, Send,
   Monitor,
   LogOut,
   MessageSquare,
@@ -31,6 +31,9 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string>("offline");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [messages, setMessages] = useState<any[]>([]);
+  const [chatInput, setChatInput] = useState("");
+  const [intercomInstance, setIntercomInstance] = useState<any>(null);
   const stopIntercomRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
@@ -51,6 +54,9 @@ export default function App() {
         signalUrl: signalUrl,
         onStatus: (s) => setStatus(s),
         onLocalStream: (stream) => setLocalStream(stream),
+        onChatMessage: (msg) => {
+          setMessages(prev => [...prev, msg]);
+        },
         onPeersChange: (updatedPeers) => {
           setPeers([...updatedPeers]);
         },
@@ -62,6 +68,7 @@ export default function App() {
 
       stopIntercomRef.current = stop;
       setRunning(true);
+      setIntercomInstance(instance);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to connect");
       setStatus("offline");
@@ -75,6 +82,10 @@ export default function App() {
     }
     setLocalStream(null);
     setPeers([]);
+    if (intercomInstance) {
+      intercomInstance.destroy();
+      setIntercomInstance(null);
+    }
     setRunning(false);
     setStatus("offline");
     setSidebarOpen(false);
@@ -250,38 +261,72 @@ export default function App() {
             </div>
           </div>
 
-          {/* Quick Actions / Status */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 mt-12 mb-8">
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4 group hover:border-echolan-300 transition-all cursor-pointer active:scale-[0.98]">
-              <div className="p-3 bg-echolan-50 rounded-xl text-echolan-600 group-hover:scale-110 transition-transform">
-                <MessageSquare size={24} />
+                    {/* Local Chatroom Section */}
+          <section className="mt-12 mb-8 bg-white rounded-2xl border border-slate-200 shadow-sm flex flex-col h-[500px]">
+            <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-echolan-50 rounded-lg text-echolan-600">
+                  <MessageSquare size={20} />
+                </div>
+                <h3 className="font-bold text-slate-800">LAN Chatroom</h3>
               </div>
-              <div>
-                <h4 className="font-bold text-slate-800">Local Chat</h4>
-                <p className="text-xs text-slate-500 font-medium">Text, Emoji, Commands</p>
-              </div>
-            </div>
-
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4 group hover:border-echolan-300 transition-all cursor-pointer active:scale-[0.98]">
-              <div className="p-3 bg-emerald-50 rounded-xl text-emerald-600 group-hover:scale-110 transition-transform">
-                <Files size={24} />
-              </div>
-              <div>
-                <h4 className="font-bold text-slate-800">P2P Files</h4>
-                <p className="text-xs text-slate-500 font-medium">Send up to 2GB Securely</p>
+              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                {messages.length} Messages
               </div>
             </div>
 
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4 group hover:border-echolan-300 transition-all cursor-pointer active:scale-[0.98] sm:col-span-2 lg:col-span-1">
-              <div className="p-3 bg-amber-50 rounded-xl text-amber-600 group-hover:scale-110 transition-transform">
-                <Settings size={24} />
-              </div>
-              <div>
-                <h4 className="font-bold text-slate-800">Advanced</h4>
-                <p className="text-xs text-slate-500 font-medium">mDNS, RTC, Codecs</p>
-              </div>
+            <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
+              {messages.length === 0 ? (
+                <div className="flex-1 flex flex-col items-center justify-center text-slate-400 gap-2">
+                  <MessageSquare size={32} className="opacity-20" />
+                  <p className="text-sm italic">No messages yet. Say hello to the LAN!</p>
+                </div>
+              ) : (
+                messages.map((msg, i) => (
+                  <div key={i} className={`flex flex-col ${msg.name === displayName ? "items-end" : "items-start"}`}>
+                    <div className="flex items-center gap-2 mb-1 px-1">
+                      <span className="text-[10px] font-bold text-slate-500 uppercase">{msg.name}</span>
+                      <span className="text-[10px] text-slate-400">{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                    </div>
+                    <div className={`px-4 py-2 rounded-2xl max-w-[80%] text-sm shadow-sm ${
+                      msg.name === displayName
+                        ? "bg-echolan-600 text-white rounded-tr-none"
+                        : "bg-slate-100 text-slate-700 rounded-tl-none"
+                    }`}>
+                      {msg.text}
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
-          </div>
+
+            <div className="p-4 border-t border-slate-100">
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!chatInput.trim() || !intercomInstance) return;
+                  intercomInstance.sendChatMessage(chatInput.trim());
+                  setChatInput('');
+                }}
+                className="flex gap-2"
+              >
+                <input
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  disabled={!running}
+                  className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-echolan-500 transition-all disabled:opacity-50"
+                  placeholder={running ? "Type a message..." : "Connect to join the chat..."}
+                />
+                <button
+                  type="submit"
+                  disabled={!running || !chatInput.trim()}
+                  className="p-2.5 bg-echolan-600 text-white rounded-xl hover:bg-echolan-700 transition-all disabled:opacity-50 disabled:grayscale"
+                >
+                  <Send size={20} />
+                </button>
+              </form>
+            </div>
+          </section>
         </section>
       </main>
     </div>
