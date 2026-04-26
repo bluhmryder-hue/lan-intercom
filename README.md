@@ -4,7 +4,7 @@ Modern, private, and secure LAN-only communication platform. Zero internet, zero
 
 ## Features
 - **Auto-Discovery**: mDNS/Bonjour for instant peer detection.
-- **P2P Text Chat**: Secure, real-time messaging via WebRTC DataChannels.
+- **Text Chatroom**: Reliable, server-relayed group messaging (WebSocket).
 - **P2P File Sharing**: Support for large files (up to 2GB) with chunked transfer.
 - **Intercom**: Opt-in voice and video feeds with local-only signaling.
 - **Privacy First**: No data ever leaves your Local Area Network.

@@ -346,6 +346,20 @@ async function startServer() {
         return;
       }
 
+      if (payload?.type === "chat") {
+        const roomId = peerRecord.roomId;
+        if (!roomId) return;
+
+        broadcastRoom(roomId, {
+          type: "chat",
+          from: peerRecord.id,
+          name: peerRecord.name,
+          text: String(payload.text || ""),
+          timestamp: new Date().toISOString(),
+        });
+        return;
+      }
+
       if (payload?.type === "leave") {
         unregisterPeer(peerRecord);
       }
