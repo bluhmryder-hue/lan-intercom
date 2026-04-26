@@ -32,7 +32,7 @@ export default function App() {
   const [status, setStatus] = useState<string>("offline");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [messages, setMessages] = useState<any[]>([]);
-  const [chatInput, setChatInput] = useState('');
+  const [chatInput, setChatInput] = useState("");
   const [intercomInstance, setIntercomInstance] = useState<any>(null);
   const stopIntercomRef = useRef<(() => void) | null>(null);
 
@@ -54,6 +54,9 @@ export default function App() {
         signalUrl: signalUrl,
         onStatus: (s) => setStatus(s),
         onLocalStream: (stream) => setLocalStream(stream),
+        onChatMessage: (msg) => {
+          setMessages(prev => [...prev, msg]);
+        },
         onPeersChange: (updatedPeers) => {
           setPeers([...updatedPeers]);
         },
@@ -258,7 +261,7 @@ export default function App() {
             </div>
           </div>
 
-          {/* Local Chatroom Section */}
+                    {/* Local Chatroom Section */}
           <section className="mt-12 mb-8 bg-white rounded-2xl border border-slate-200 shadow-sm flex flex-col h-[500px]">
             <div className="p-4 border-b border-slate-100 flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -280,12 +283,16 @@ export default function App() {
                 </div>
               ) : (
                 messages.map((msg, i) => (
-                  <div key={i} className={}>
+                  <div key={i} className={`flex flex-col ${msg.name === displayName ? "items-end" : "items-start"}`}>
                     <div className="flex items-center gap-2 mb-1 px-1">
                       <span className="text-[10px] font-bold text-slate-500 uppercase">{msg.name}</span>
                       <span className="text-[10px] text-slate-400">{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                     </div>
-                    <div className={}>
+                    <div className={`px-4 py-2 rounded-2xl max-w-[80%] text-sm shadow-sm ${
+                      msg.name === displayName
+                        ? "bg-echolan-600 text-white rounded-tr-none"
+                        : "bg-slate-100 text-slate-700 rounded-tl-none"
+                    }`}>
                       {msg.text}
                     </div>
                   </div>
@@ -320,6 +327,32 @@ export default function App() {
               </form>
             </div>
           </section>
+              <div>
+                <h4 className="font-bold text-slate-800">Local Chat</h4>
+                <p className="text-xs text-slate-500 font-medium">Text, Emoji, Commands</p>
+              </div>
+            </div>
+
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4 group hover:border-echolan-300 transition-all cursor-pointer active:scale-[0.98]">
+              <div className="p-3 bg-emerald-50 rounded-xl text-emerald-600 group-hover:scale-110 transition-transform">
+                <Files size={24} />
+              </div>
+              <div>
+                <h4 className="font-bold text-slate-800">P2P Files</h4>
+                <p className="text-xs text-slate-500 font-medium">Send up to 2GB Securely</p>
+              </div>
+            </div>
+
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4 group hover:border-echolan-300 transition-all cursor-pointer active:scale-[0.98] sm:col-span-2 lg:col-span-1">
+              <div className="p-3 bg-amber-50 rounded-xl text-amber-600 group-hover:scale-110 transition-transform">
+                <Settings size={24} />
+              </div>
+              <div>
+                <h4 className="font-bold text-slate-800">Advanced</h4>
+                <p className="text-xs text-slate-500 font-medium">mDNS, RTC, Codecs</p>
+              </div>
+            </div>
+          </div>
         </section>
       </main>
     </div>

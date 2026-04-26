@@ -345,7 +345,6 @@ async function startServer() {
         }
         return;
       }
-
       if (payload?.type === "chat") {
         const roomId = peerRecord.roomId;
         if (!roomId) return;
@@ -359,6 +358,7 @@ async function startServer() {
         });
         return;
       }
+
 
       if (payload?.type === "leave") {
         unregisterPeer(peerRecord);

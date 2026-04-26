@@ -379,16 +379,6 @@ export async function startIntercom(options: StartIntercomOptions) {
       return;
     }
 
-    if (payload.type === "signal") {
-      try {
-        await handleSignal(payload);
-      } catch (error) {
-        console.error(error);
-        onError("Failed to process signaling message.");
-      }
-      return;
-    }
-
     if (payload.type === "chat") {
       onChatMessage?.({
         from: payload.from,
@@ -396,6 +386,16 @@ export async function startIntercom(options: StartIntercomOptions) {
         text: payload.text,
         timestamp: payload.timestamp,
       });
+      return;
+    }
+
+    if (payload.type === "signal") {
+      try {
+        await handleSignal(payload);
+      } catch (error) {
+        console.error(error);
+        onError("Failed to process signaling message.");
+      }
       return;
     }
 
@@ -415,7 +415,7 @@ export async function startIntercom(options: StartIntercomOptions) {
   syncPeers();
 
   const sendChatMessage = (text: string) => {
-    send({ type: "chat", text });
+    send({ type: chat, text });
   };
 
   return {
@@ -438,5 +438,7 @@ export async function startIntercom(options: StartIntercomOptions) {
       }
       localStream = null;
     }
+  },
+  sendChatMessage
   };
 }
