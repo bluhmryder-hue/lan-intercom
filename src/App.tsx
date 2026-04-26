@@ -327,32 +327,6 @@ export default function App() {
               </form>
             </div>
           </section>
-              <div>
-                <h4 className="font-bold text-slate-800">Local Chat</h4>
-                <p className="text-xs text-slate-500 font-medium">Text, Emoji, Commands</p>
-              </div>
-            </div>
-
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4 group hover:border-echolan-300 transition-all cursor-pointer active:scale-[0.98]">
-              <div className="p-3 bg-emerald-50 rounded-xl text-emerald-600 group-hover:scale-110 transition-transform">
-                <Files size={24} />
-              </div>
-              <div>
-                <h4 className="font-bold text-slate-800">P2P Files</h4>
-                <p className="text-xs text-slate-500 font-medium">Send up to 2GB Securely</p>
-              </div>
-            </div>
-
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4 group hover:border-echolan-300 transition-all cursor-pointer active:scale-[0.98] sm:col-span-2 lg:col-span-1">
-              <div className="p-3 bg-amber-50 rounded-xl text-amber-600 group-hover:scale-110 transition-transform">
-                <Settings size={24} />
-              </div>
-              <div>
-                <h4 className="font-bold text-slate-800">Advanced</h4>
-                <p className="text-xs text-slate-500 font-medium">mDNS, RTC, Codecs</p>
-              </div>
-            </div>
-          </div>
         </section>
       </main>
     </div>
