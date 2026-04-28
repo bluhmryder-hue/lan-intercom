@@ -8,28 +8,31 @@
     "build": "vite build",
     "preview": "vite preview",
     "deploy": "node scripts/oneclick-deploy.mjs",
-    "start": "node scripts/oneclick-deploy.mjs"
+    "start": "node scripts/oneclick-deploy.mjs",
+    "test": "vitest run -c tests/vitest.config.ts"
   },
   "dependencies": {
+    "@tailwindcss/vite": "^4.2.3",
+    "@types/node": "^20.0.0",
+    "@types/react": "^18.2.14",
+    "@types/react-dom": "^18.2.7",
+    "@vitejs/plugin-react": "^4.2.0",
+    "autoprefixer": "^10.5.0",
     "bonjour-service": "^1.3.0",
     "clsx": "^2.1.1",
+    "jsdom": "^24.0.0",
     "lucide-react": "^1.8.0",
+    "postcss": "^8.5.10",
     "qrcode-terminal": "^0.12.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "selfsigned": "^2.4.1",
     "tailwind-merge": "^3.5.0",
-    "typescript": "^5.1.6",
-    "ws": "^8.18.0"
-  },
-  "devDependencies": {
-    "@tailwindcss/vite": "^4.2.3",
-    "@types/react": "^18.2.14",
-    "@types/react-dom": "^18.2.7",
-    "@vitejs/plugin-react": "^4.2.0",
-    "autoprefixer": "^10.5.0",
-    "postcss": "^8.5.10",
     "tailwindcss": "^4.2.3",
-    "vite": "^5.3.0"
+    "typescript": "^5.1.6",
+    "vite": "^5.3.0",
+    "vitest": "^1.4.0",
+    "vitest-canvas-mock": "^0.3.3",
+    "ws": "^8.18.0"
   }
 }
